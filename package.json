@@ -1,0 +1,16 @@
+{
+  "name": "milktruck2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun ./index.html",
+    "build": "bun run build.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/google.maps": "^3.58.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -1,0 +1,5 @@
+[serve.static]
+env = "GOOGLE_MAPS_*"
+
+[build]
+env = "GOOGLE_MAPS_*"

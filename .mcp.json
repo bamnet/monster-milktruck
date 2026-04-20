@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "chrome-devtools": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--chromeArg=--enable-unsafe-swiftshader",
+        "--chromeArg=--ignore-gpu-blocklist",
+        "--chromeArg=--enable-webgl",
+        "--chromeArg=--use-gl=angle",
+        "--chromeArg=--use-angle=swiftshader"
+      ],
+      "env": {}
+    }
+  }
+}
