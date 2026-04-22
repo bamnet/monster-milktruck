@@ -18,27 +18,11 @@ const PRESETS: Array<{ label: string; lat: number; lng: number; heading: number 
 
 const INIT_LOC: TruckStart = PRESETS[0]!;
 
-declare global {
-  interface Window {
-    __mapsReady?: () => void;
-  }
-}
-
-function loadMapsApi(apiKey: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (window.google?.maps) return resolve();
-    window.__mapsReady = () => resolve();
-    const s = document.createElement('script');
-    const params = new URLSearchParams({
-      key: apiKey,
-      v: 'weekly',
-      libraries: 'maps3d',
-      callback: '__mapsReady',
-    });
-    s.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`;
-    s.async = true;
-    s.onerror = () => reject(new Error('Failed to load Google Maps API'));
-    document.head.appendChild(s);
+function loadMapsAPI(apiKey: string) {
+  // @ts-ignore
+  (g => { var h, a, k, p = "The Google Maps JavaScript API", c = "google", l = "importLibrary", q = "__ib__", m = document, b = window; b = b[c] || (b[c] = {}); var d = b.maps || (b.maps = {}), r = new Set, e = new URLSearchParams, u = () => h || (h = new Promise(async (f, n) => { await (a = m.createElement("script")); e.set("libraries", [...r] + ""); for (k in g) e.set(k.replace(/[A-Z]/g, t => "_" + t[0].toLowerCase()), g[k]); e.set("callback", c + ".maps." + q); a.src = `https://maps.${c}apis.com/maps/api/js?` + e; d[q] = f; a.onerror = () => h = n(Error(p + " could not load.")); a.nonce = m.querySelector("script[nonce]")?.nonce || ""; m.head.append(a) })); d[l] ? console.warn(p + " only loads once. Ignoring:", g) : d[l] = (f, ...n) => r.add(f) && u().then(() => d[l](f, ...n)) })({
+    key: apiKey,
+    v: "weekly",
   });
 }
 
@@ -59,12 +43,12 @@ async function main(): Promise<void> {
   if (!API_KEY) {
     fatal(
       'Missing GOOGLE_MAPS_API_KEY.\n\n' +
-        'Copy .env.example to .env and add your key, then restart the dev server.',
+      'Copy .env.example to .env and add your key, then restart the dev server.',
     );
     return;
   }
 
-  await loadMapsApi(API_KEY);
+  loadMapsAPI(API_KEY);
 
   const { Map3DElement, Model3DElement, AltitudeMode, MapMode } =
     (await google.maps.importLibrary('maps3d')) as typeof google.maps.maps3d;
