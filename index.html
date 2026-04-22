@@ -1,32 +1,44 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Monster Milktruck!</title>
-  </head>
-  <body>
-    <div class="app">
-      <div class="title"><i>MONSTER MILKTRUCK!</i></div>
-      <p class="hint">Arrow keys (or WASD) to drive. Click a preset to teleport.</p>
 
-      <div id="map-container"></div>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Monster Milktruck!</title>
+</head>
 
-      <div id="popup" class="popup" hidden></div>
+<body>
+  <div class="app">
+    <div class="title"><i>MONSTER MILKTRUCK!</i></div>
+    <p class="hint">Arrow keys (or WASD) to drive. Click a preset to teleport.</p>
 
-      <div class="controls">
+    <div id="map-container"></div>
+
+    <div id="popup" class="popup" hidden></div>
+
+    <div class="controls">
+      <div class="left-controls">
         <div id="presets"></div>
-        <div class="dpad">
-          <button id="btn-gas" type="button">gas</button>
-          <button id="btn-left" type="button">left</button>
-          <button id="btn-right" type="button">right</button>
-          <button id="btn-reverse" type="button">reverse</button>
+        <div id="map-mode-panel">
+          <label for="map-mode">Map</label>
+          <select id="map-mode">
+            <option value="SATELLITE">Satellite</option>
+            <option value="ROADMAP">Roadmap</option>
+          </select>
         </div>
       </div>
-
-      <pre id="fatal" hidden></pre>
+      <div class="dpad">
+        <button id="btn-gas" type="button">gas</button>
+        <button id="btn-left" type="button">left</button>
+        <button id="btn-right" type="button">right</button>
+        <button id="btn-reverse" type="button">reverse</button>
+      </div>
     </div>
 
-    <script type="module" src="./src/main.ts"></script>
-  </body>
+    <pre id="fatal" hidden></pre>
+  </div>
+
+  <script type="module" src="./src/main.ts"></script>
+</body>
+
 </html>
