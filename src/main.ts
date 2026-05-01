@@ -80,9 +80,12 @@ async function main(): Promise<void> {
   });
   map.append(model);
 
+  const urlParams = new URLSearchParams(window.location.search);
+  const altitudeMode = urlParams.has('fixedAltitude') ? AltitudeMode.ABSOLUTE : AltitudeMode.RELATIVE_TO_GROUND;
+
   const input = createInput();
   const popupEl = document.getElementById('popup')!;
-  const truck = new Truck(map, model, input, popupEl, AltitudeMode.RELATIVE_TO_GROUND, INIT_LOC);
+  const truck = new Truck(map, model, input, popupEl, altitudeMode, INIT_LOC);
 
   renderPresets(truck);
 
