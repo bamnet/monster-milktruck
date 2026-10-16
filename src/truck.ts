@@ -72,6 +72,8 @@ export class Truck {
   private fastTimer = 0;
   private popupTimer = 0;
   private teleportUntil = 0;
+  private lastModelKey = '';
+  private lastCameraKey = '';
 
   constructor(
     private readonly map: Map3D,
@@ -86,7 +88,19 @@ export class Truck {
     this.heading = start.heading;
     this.camHeading = start.heading;
     this.applyModel();
-    this.cutCamera();
+
+    // Wait for the initial scene to finish loading (gmp-steadychange) before
+    // snapping the camera to RELATIVE_TO_GROUND.
+    const initialCameraKey = this.cameraKey();
+    this.lastCameraKey = initialCameraKey;
+    const onInitialSteady = (e: Event) => {
+      if (!(e as Event & { isSteady?: boolean }).isSteady) return;
+      this.map.removeEventListener('gmp-steadychange', onInitialSteady);
+      if (this.lastCameraKey === initialCameraKey && performance.now() >= this.teleportUntil) {
+        this.flyCameraToSelf(0, true);
+      }
+    };
+    this.map.addEventListener('gmp-steadychange', onInitialSteady);
   }
 
   teleportTo(lat: number, lng: number, heading = 0): void {
@@ -177,19 +191,32 @@ export class Truck {
       if (drag > absSpeed / dt) drag = absSpeed / dt;
       this.velE -= (this.velE / absSpeed) * drag * dt;
       this.velN -= (this.velN / absSpeed) * drag * dt;
+      if (Math.hypot(this.velE, this.velN) <= 0.01 && !gas && !reverse) {
+        this.velE = 0;
+        this.velN = 0;
+      }
+    } else if (!gas && !reverse) {
+      this.velE = 0;
+      this.velN = 0;
     }
 
-    const deltaE = this.velE * dt;
-    const deltaN = this.velN * dt;
-    const next = offsetToLatLng(this.lat, this.lng, deltaE, deltaN);
-    this.lat = next.lat;
-    this.lng = next.lng;
+    if (this.velE !== 0 || this.velN !== 0) {
+      const deltaE = this.velE * dt;
+      const deltaN = this.velN * dt;
+      const next = offsetToLatLng(this.lat, this.lng, deltaE, deltaN);
+      this.lat = next.lat;
+      this.lng = next.lng;
+    }
 
     forwardSpeed = this.velE * dirE + this.velN * dirN;
     this.rollSpeed += degToRad(steerDeg) * forwardSpeed * STEER_ROLL;
     this.rollSpeed += ROLL_SPRING * -this.roll + ROLL_DAMP * this.rollSpeed;
     this.roll += this.rollSpeed * dt;
     this.roll = clamp(this.roll, -30, 30);
+    if (Math.abs(this.roll) < 0.001 && Math.abs(this.rollSpeed) < 0.001 && !left && !right) {
+      this.roll = 0;
+      this.rollSpeed = 0;
+    }
 
     this.applyModel();
     this.followCamera(dt);
@@ -197,6 +224,10 @@ export class Truck {
   }
 
   private applyModel(): void {
+    const key = `${this.lat},${this.lng},${this.heading},${this.roll}`;
+    if (key === this.lastModelKey) return;
+    this.lastModelKey = key;
+
     this.model.position = { lat: this.lat, lng: this.lng, altitude: 0 };
     this.model.orientation = {
       heading: fixAngle(this.heading + MODEL_HEADING_OFFSET),
@@ -205,20 +236,27 @@ export class Truck {
     };
   }
 
-  private cutCamera(): void {
-    this.camHeading = this.heading;
-    this.flyCameraToSelf(0);
-  }
-
   private followCamera(dt: number): void {
     if (performance.now() < this.teleportUntil) return;
-    const c0 = Math.exp(-dt / CAM_SMOOTH_TAU);
     const delta = fixAngle(this.heading - this.camHeading);
-    this.camHeading = fixAngle(this.camHeading + (1 - c0) * delta);
+    if (Math.abs(delta) < 0.01) {
+      this.camHeading = this.heading;
+    } else {
+      const c0 = Math.exp(-dt / CAM_SMOOTH_TAU);
+      this.camHeading = fixAngle(this.camHeading + (1 - c0) * delta);
+    }
     this.flyCameraToSelf(0);
   }
 
-  private flyCameraToSelf(durationMillis: number): void {
+  private cameraKey(): string {
+    return `${this.lat},${this.lng},${this.camHeading},${this.altitudeMode}`;
+  }
+
+  private flyCameraToSelf(durationMillis: number, force = false): void {
+    const key = this.cameraKey();
+    if (!force && durationMillis === 0 && key === this.lastCameraKey) return;
+    this.lastCameraKey = key;
+
     this.map.flyCameraTo({
       endCamera: {
         center: { lat: this.lat, lng: this.lng, altitude: 0 },
