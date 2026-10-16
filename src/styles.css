@@ -2,7 +2,7 @@
   --bg: #0b0d10;
   --fg: #f4f4f4;
   --accent: #ffb84d;
-  --panel: rgba(15, 17, 20, 0.78);
+  --panel: rgba(15, 17, 20, 0.88);
 }
 
 html,
@@ -28,6 +28,7 @@ body {
   inset: 0;
   width: 100%;
   height: 100%;
+  contain: strict;
 }
 
 .title {
@@ -112,7 +113,6 @@ body {
   padding: 0.6rem;
   background: var(--panel);
   border-radius: 0.5rem;
-  backdrop-filter: blur(6px);
 }
 
 #presets button {
@@ -137,7 +137,6 @@ body {
   padding: 0.6rem;
   background: var(--panel);
   border-radius: 0.5rem;
-  backdrop-filter: blur(6px);
   font-weight: 600;
   font-size: 0.9rem;
   width: fit-content;
@@ -169,7 +168,6 @@ body {
   padding: 0.5rem;
   background: var(--panel);
   border-radius: 0.6rem;
-  backdrop-filter: blur(6px);
 }
 
 .dpad button {
