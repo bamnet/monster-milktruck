@@ -22,6 +22,7 @@ const CAM_TILT_DEG = 72;
 const CAM_RANGE_M = 55;
 const CAM_SMOOTH_TAU = 0.5;
 const TELEPORT_FLY_MS = 1200;
+const CAMERA_IN_FLIGHT_MAX_MS = 50;
 
 // Offsets to reconcile the glb's local axes with Google Maps' orientation
 // convention (heading=tilt=roll=0 places the model in some default pose that
@@ -72,8 +73,10 @@ export class Truck {
   private fastTimer = 0;
   private popupTimer = 0;
   private teleportUntil = 0;
-  private lastModelKey = '';
+  private lastPositionKey = '';
+  private lastOrientationKey = '';
   private lastCameraKey = '';
+  private cameraFlyInFlightUntil = 0;
 
   constructor(
     private readonly map: Map3D,
@@ -88,6 +91,12 @@ export class Truck {
     this.heading = start.heading;
     this.camHeading = start.heading;
     this.applyModel();
+
+    const clearInFlight = () => {
+      this.cameraFlyInFlightUntil = 0;
+    };
+    this.map.addEventListener('gmp-centerchange', clearInFlight);
+    this.map.addEventListener('gmp-animationend', clearInFlight);
 
     // Wait for the initial scene to finish loading (gmp-steadychange) before
     // snapping the camera to RELATIVE_TO_GROUND.
@@ -136,7 +145,7 @@ export class Truck {
     this.running = false;
   }
 
-  private step(dt: number): void {
+  step(dt: number): void {
     const { left, right, gas, reverse } = this.input;
     const speed = Math.hypot(this.velE, this.velN);
 
@@ -224,16 +233,25 @@ export class Truck {
   }
 
   private applyModel(): void {
-    const key = `${this.lat},${this.lng},${this.heading},${this.roll}`;
-    if (key === this.lastModelKey) return;
-    this.lastModelKey = key;
+    const lat = roundCoord(this.lat);
+    const lng = roundCoord(this.lng);
+    const posKey = `${lat},${lng}`;
+    if (posKey !== this.lastPositionKey) {
+      this.lastPositionKey = posKey;
+      this.model.position = { lat, lng, altitude: 0 };
+    }
 
-    this.model.position = { lat: this.lat, lng: this.lng, altitude: 0 };
-    this.model.orientation = {
-      heading: fixAngle(this.heading + MODEL_HEADING_OFFSET),
-      tilt: MODEL_TILT_OFFSET,
-      roll: fixAngle(this.roll + MODEL_ROLL_OFFSET),
-    };
+    const heading = roundAngle(fixAngle(this.heading + MODEL_HEADING_OFFSET));
+    const roll = roundAngle(fixAngle(this.roll + MODEL_ROLL_OFFSET));
+    const oriKey = `${heading},${roll}`;
+    if (oriKey !== this.lastOrientationKey) {
+      this.lastOrientationKey = oriKey;
+      this.model.orientation = {
+        heading,
+        tilt: MODEL_TILT_OFFSET,
+        roll,
+      };
+    }
   }
 
   private followCamera(dt: number): void {
@@ -249,19 +267,24 @@ export class Truck {
   }
 
   private cameraKey(): string {
-    return `${this.lat},${this.lng},${this.camHeading},${this.altitudeMode}`;
+    return `${roundCoord(this.lat)},${roundCoord(this.lng)},${roundAngle(this.camHeading)},${this.altitudeMode}`;
   }
 
   private flyCameraToSelf(durationMillis: number, force = false): void {
+    const now = performance.now();
     const key = this.cameraKey();
-    if (!force && durationMillis === 0 && key === this.lastCameraKey) return;
+    if (!force && durationMillis === 0) {
+      if (key === this.lastCameraKey) return;
+      if (now < this.cameraFlyInFlightUntil) return;
+    }
     this.lastCameraKey = key;
+    this.cameraFlyInFlightUntil = durationMillis === 0 ? now + CAMERA_IN_FLIGHT_MAX_MS : 0;
 
     this.map.flyCameraTo({
       endCamera: {
-        center: { lat: this.lat, lng: this.lng, altitude: 0 },
+        center: { lat: roundCoord(this.lat), lng: roundCoord(this.lng), altitude: 0 },
         altitudeMode: this.altitudeMode,
-        heading: this.camHeading,
+        heading: roundAngle(this.camHeading),
         tilt: CAM_TILT_DEG,
         range: CAM_RANGE_M,
       },
@@ -304,6 +327,14 @@ export class Truck {
     this.popupEl.hidden = false;
     this.popupTimer = 2.0;
   }
+}
+
+function roundCoord(v: number): number {
+  return Math.round(v * 1e7) / 1e7;
+}
+
+function roundAngle(v: number): number {
+  return Math.round(v * 100) / 100;
 }
 
 function pickRandom(arr: readonly string[]): string {
