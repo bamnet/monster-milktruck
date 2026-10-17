@@ -162,7 +162,7 @@ describe('Truck', () => {
     expect(model.orientationWrites).toHaveLength(1);
   });
 
-  test('gates overlapping flyCameraTo(0) calls until in-flight update settles', () => {
+  test('gates overlapping flyCameraTo(0) calls before initial steady, then updates every frame once steady', () => {
     const map = createFakeMap();
     const model = createFakeModel();
     const input = createInputState({ gas: true });
@@ -177,20 +177,22 @@ describe('Truck', () => {
       { lat: 37.423501, lng: -122.086744, heading: 90 },
     );
 
-    // Frame 1 starts an in-flight camera update
+    // Frame 1 (before initial gmp-steadychange) starts an in-flight camera update
     truck.step(1 / 60);
     expect(map.flyCalls).toHaveLength(1);
 
-    // Frame 2 occurs immediately before gmp-centerchange / gmp-animationend fires:
-    // model position updates, but overlapping flyCameraTo(0) is held back
+    // Frame 2 occurs immediately before gmp-centerchange / gmp-steadychange fires:
+    // model position updates, but overlapping flyCameraTo(0) is held back during initial load
     truck.step(1 / 60);
     expect(model.positionWrites).toHaveLength(3);
     expect(map.flyCalls).toHaveLength(1);
 
-    // Once the map signals the previous camera update settled, the next frame updates immediately
-    map.dispatchCenterChange();
+    // Once the initial scene is steady, subsequent driving frames update every frame without gating
+    map.dispatchSteady(true);
     truck.step(1 / 60);
     expect(map.flyCalls).toHaveLength(2);
+    truck.step(1 / 60);
+    expect(map.flyCalls).toHaveLength(3);
   });
 
   test('clamps residual velocity, roll, and camera lag to zero after coming to rest', () => {

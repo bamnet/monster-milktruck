@@ -77,6 +77,7 @@ export class Truck {
   private lastOrientationKey = '';
   private lastCameraKey = '';
   private cameraFlyInFlightUntil = 0;
+  private initialSceneReady = false;
 
   constructor(
     private readonly map: Map3D,
@@ -104,6 +105,8 @@ export class Truck {
     this.lastCameraKey = initialCameraKey;
     const onInitialSteady = (e: Event) => {
       if (!(e as Event & { isSteady?: boolean }).isSteady) return;
+      this.initialSceneReady = true;
+      this.cameraFlyInFlightUntil = 0;
       this.map.removeEventListener('gmp-steadychange', onInitialSteady);
       if (this.lastCameraKey === initialCameraKey && performance.now() >= this.teleportUntil) {
         this.flyCameraToSelf(0, true);
@@ -278,7 +281,8 @@ export class Truck {
       if (now < this.cameraFlyInFlightUntil) return;
     }
     this.lastCameraKey = key;
-    this.cameraFlyInFlightUntil = durationMillis === 0 ? now + CAMERA_IN_FLIGHT_MAX_MS : 0;
+    this.cameraFlyInFlightUntil =
+      durationMillis === 0 && !this.initialSceneReady ? now + CAMERA_IN_FLIGHT_MAX_MS : 0;
 
     this.map.flyCameraTo({
       endCamera: {

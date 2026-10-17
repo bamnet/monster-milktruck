@@ -28,10 +28,12 @@ export function createInput(): InputState {
     if (!field) return;
     state[field] = down;
     e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
   };
 
-  window.addEventListener('keydown', onKey(true));
-  window.addEventListener('keyup', onKey(false));
+  window.addEventListener('keydown', onKey(true), { capture: true });
+  window.addEventListener('keyup', onKey(false), { capture: true });
 
   const bindButton = (id: string, field: keyof InputState) => {
     const el = document.getElementById(id);
