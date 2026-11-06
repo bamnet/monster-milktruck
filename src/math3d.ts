@@ -18,7 +18,8 @@ export function offsetToLatLng(
   east: number,
   north: number,
 ): { lat: number; lng: number } {
-  const dLat = (north / EARTH_RADIUS_M) * (180 / Math.PI);
-  const dLng = (east / (EARTH_RADIUS_M * Math.cos(degToRad(lat)))) * (180 / Math.PI);
-  return { lat: lat + dLat, lng: lng + dLng };
+  const nextLat = clamp(lat + (north / EARTH_RADIUS_M) * (180 / Math.PI), -90, 90);
+  const cosLat = Math.max(Math.abs(Math.cos(degToRad(lat))), 1e-6);
+  const dLng = (east / (EARTH_RADIUS_M * cosLat)) * (180 / Math.PI);
+  return { lat: nextLat, lng: fixAngle(lng + dLng) };
 }

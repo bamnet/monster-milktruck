@@ -1,3 +1,4 @@
+import { PRESETS, resolveAltitudeMode } from './config.ts';
 import { createInput } from './input.ts';
 import { Truck, type TruckStart } from './truck.ts';
 import truckModelUrl from '../public/milktruck.glb' with { type: 'file' };
@@ -6,15 +7,6 @@ import './styles.css';
 declare const process: { env: { GOOGLE_MAPS_API_KEY?: string } };
 
 const API_KEY = process.env.GOOGLE_MAPS_API_KEY ?? '';
-
-const PRESETS: Array<{ label: string; lat: number; lng: number; heading: number }> = [
-  { label: "Th' Plex", lat: 37.423501, lng: -122.086744, heading: 90 },
-  { label: 'San Francisco', lat: 37.7749, lng: -122.4194, heading: 0 },
-  { label: 'Whistler', lat: 50.085734, lng: -122.855824, heading: 220 },
-  { label: 'Pismo', lat: 35.040675, lng: -120.629513, heading: 170 },
-  { label: 'Tokyo', lat: 35.668607, lng: 139.822026, heading: 180 },
-  { label: 'Everest', lat: 27.991283, lng: 86.92434, heading: 70 },
-];
 
 const INIT_LOC: TruckStart = PRESETS[0]!;
 
@@ -80,8 +72,7 @@ async function main(): Promise<void> {
   });
   map.append(model);
 
-  const urlParams = new URLSearchParams(window.location.search);
-  const altitudeMode = urlParams.has('fixedAltitude') ? AltitudeMode.ABSOLUTE : AltitudeMode.RELATIVE_TO_GROUND;
+  const altitudeMode = resolveAltitudeMode(window.location.search);
 
   const input = createInput();
   const popupEl = document.getElementById('popup')!;
