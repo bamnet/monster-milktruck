@@ -1,0 +1,1019 @@
+{
+  "preset": "Whistler",
+  "start": {
+    "lat": 50.085734,
+    "lng": -122.855824,
+    "heading": 220
+  },
+  "capturedAt": "2026-11-07",
+  "frames": [
+    {
+      "tMs": 0.5,
+      "dt": 0.1167,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": false,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.085734,
+        "lng": -122.855824
+      },
+      "mapCenter": {
+        "lat": 50.0860942,
+        "lng": -122.8553529,
+        "altitude": 2334.65
+      },
+      "mapRange": 0,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 117.2,
+      "dt": 0.1167,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": false,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.085734,
+        "lng": -122.855824
+      },
+      "mapCenter": {
+        "lat": 50.0860942,
+        "lng": -122.8553529,
+        "altitude": 2334.65
+      },
+      "mapRange": 0,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 283.9,
+      "dt": 0.1667,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0857248,
+        "lng": -122.855836
+      },
+      "mapCenter": {
+        "lat": 50.0860942,
+        "lng": -122.8553529,
+        "altitude": 2334.65
+      },
+      "mapRange": 0,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 350.5,
+      "dt": 0.0666,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0857197,
+        "lng": -122.8558427
+      },
+      "mapCenter": {
+        "lat": 50.0860942,
+        "lng": -122.8553529,
+        "altitude": 2334.65
+      },
+      "mapRange": 0,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 467.2,
+      "dt": 0.1167,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0857063,
+        "lng": -122.8558603
+      },
+      "mapCenter": {
+        "lat": 50.0860942,
+        "lng": -122.8553529,
+        "altitude": 2334.65
+      },
+      "mapRange": 0,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 583.8,
+      "dt": 0.1166,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0856884,
+        "lng": -122.8558837
+      },
+      "mapCenter": {
+        "lat": 50.0860942,
+        "lng": -122.8553529,
+        "altitude": 2334.65
+      },
+      "mapRange": 0,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 700.5,
+      "dt": 0.1167,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.085666,
+        "lng": -122.8559129
+      },
+      "mapCenter": {
+        "lat": 50.0860942,
+        "lng": -122.8553529,
+        "altitude": 2334.65
+      },
+      "mapRange": 0,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 833.8,
+      "dt": 0.1333,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0856348,
+        "lng": -122.8559538
+      },
+      "mapCenter": {
+        "lat": 50.0860942,
+        "lng": -122.8553529,
+        "altitude": 2334.65
+      },
+      "mapRange": 0,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 933.8,
+      "dt": 0.1,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0856081,
+        "lng": -122.8559886
+      },
+      "mapCenter": {
+        "lat": 50.0860942,
+        "lng": -122.8553529,
+        "altitude": 2334.65
+      },
+      "mapRange": 0,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 1067.2,
+      "dt": 0.1334,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0855669,
+        "lng": -122.8560425
+      },
+      "mapCenter": {
+        "lat": 50.0856358,
+        "lng": -122.8559524,
+        "altitude": 2324.39
+      },
+      "mapRange": 44.48,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 1183.8,
+      "dt": 0.1166,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0855266,
+        "lng": -122.8560952
+      },
+      "mapCenter": {
+        "lat": 50.0855266,
+        "lng": -122.8560952,
+        "altitude": 2322.44
+      },
+      "mapRange": 55,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 1300.5,
+      "dt": 0.1167,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0854821,
+        "lng": -122.8561535
+      },
+      "mapCenter": {
+        "lat": 50.0854821,
+        "lng": -122.8561535,
+        "altitude": 2323.88
+      },
+      "mapRange": 55,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 1417.1,
+      "dt": 0.1166,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0854334,
+        "lng": -122.8562171
+      },
+      "mapCenter": {
+        "lat": 50.0854339,
+        "lng": -122.8562165,
+        "altitude": 2325.34
+      },
+      "mapRange": 54.93,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 1550.4,
+      "dt": 0.1333,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0853723,
+        "lng": -122.856297
+      },
+      "mapCenter": {
+        "lat": 50.0853723,
+        "lng": -122.856297,
+        "altitude": 2327.13
+      },
+      "mapRange": 55,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 1683.8,
+      "dt": 0.1334,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.085306,
+        "lng": -122.8563838
+      },
+      "mapCenter": {
+        "lat": 50.085306,
+        "lng": -122.8563838,
+        "altitude": 2329.09
+      },
+      "mapRange": 55,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 1833.7,
+      "dt": 0.1499,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0852248,
+        "lng": -122.8564898
+      },
+      "mapCenter": {
+        "lat": 50.0852248,
+        "lng": -122.8564898,
+        "altitude": 2331.65
+      },
+      "mapRange": 55,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 1950.4,
+      "dt": 0.1167,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0851578,
+        "lng": -122.8565775
+      },
+      "mapCenter": {
+        "lat": 50.0851642,
+        "lng": -122.8565692,
+        "altitude": 2333.84
+      },
+      "mapRange": 54.03,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 2067.2,
+      "dt": 0.1168,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0850869,
+        "lng": -122.8566703
+      },
+      "mapCenter": {
+        "lat": 50.0850879,
+        "lng": -122.856669,
+        "altitude": 2335.66
+      },
+      "mapRange": 54.85,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 2200.4,
+      "dt": 0.1332,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0850011,
+        "lng": -122.8567825
+      },
+      "mapCenter": {
+        "lat": 50.0850011,
+        "lng": -122.8567825,
+        "altitude": 2339.22
+      },
+      "mapRange": 55,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 2317.1,
+      "dt": 0.1167,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0849223,
+        "lng": -122.8568855
+      },
+      "mapCenter": {
+        "lat": 50.0849229,
+        "lng": -122.8568848,
+        "altitude": 2342.52
+      },
+      "mapRange": 54.91,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 2433.7,
+      "dt": 0.1166,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.08484,
+        "lng": -122.8569932
+      },
+      "mapCenter": {
+        "lat": 50.08484,
+        "lng": -122.8569932,
+        "altitude": 2344.42
+      },
+      "mapRange": 55,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 2567.1,
+      "dt": 0.1334,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0847412,
+        "lng": -122.8571223
+      },
+      "mapCenter": {
+        "lat": 50.0847412,
+        "lng": -122.8571223,
+        "altitude": 2344.69
+      },
+      "mapRange": 55,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 2667,
+      "dt": 0.0999,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0846647,
+        "lng": -122.8572223
+      },
+      "mapCenter": {
+        "lat": 50.0846647,
+        "lng": -122.8572223,
+        "altitude": 2344.36
+      },
+      "mapRange": 55,
+      "mapHeading": 220
+    },
+    {
+      "tMs": 2783.8,
+      "dt": 0.1168,
+      "input": {
+        "left": false,
+        "right": true,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0845748,
+        "lng": -122.8573477
+      },
+      "mapCenter": {
+        "lat": 50.0845748,
+        "lng": -122.8573477,
+        "altitude": 2344.22
+      },
+      "mapRange": 55,
+      "mapHeading": 221.55
+    },
+    {
+      "tMs": 2900.4,
+      "dt": 0.1166,
+      "input": {
+        "left": false,
+        "right": true,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0844874,
+        "lng": -122.8574837
+      },
+      "mapCenter": {
+        "lat": 50.0844874,
+        "lng": -122.8574837,
+        "altitude": 2342.25
+      },
+      "mapRange": 55,
+      "mapHeading": 224.28
+    },
+    {
+      "tMs": 3017,
+      "dt": 0.1166,
+      "input": {
+        "left": false,
+        "right": true,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0844048,
+        "lng": -122.8576314
+      },
+      "mapCenter": {
+        "lat": 50.0815851,
+        "lng": -122.8624977,
+        "altitude": 2186.75
+      },
+      "mapRange": 547.08,
+      "mapHeading": 227.92
+    },
+    {
+      "tMs": 3167.1,
+      "dt": 0.1501,
+      "input": {
+        "left": false,
+        "right": true,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0843117,
+        "lng": -122.8578404
+      },
+      "mapCenter": {
+        "lat": 50.0844561,
+        "lng": -122.8575323,
+        "altitude": 2341.42
+      },
+      "mapRange": 26.36,
+      "mapHeading": 233.85
+    },
+    {
+      "tMs": 3333.7,
+      "dt": 0.1666,
+      "input": {
+        "left": false,
+        "right": true,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0842301,
+        "lng": -122.8580915
+      },
+      "mapCenter": {
+        "lat": 50.0844411,
+        "lng": -122.8574864,
+        "altitude": 2341.83
+      },
+      "mapRange": 3.32,
+      "mapHeading": 241.48
+    },
+    {
+      "tMs": 3500.4,
+      "dt": 0.1667,
+      "input": {
+        "left": false,
+        "right": true,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0841735,
+        "lng": -122.8583561
+      },
+      "mapCenter": {
+        "lat": 50.0836257,
+        "lng": -122.8606749,
+        "altitude": 2260.34
+      },
+      "mapRange": 240.44,
+      "mapHeading": 249.79
+    },
+    {
+      "tMs": 3517,
+      "dt": 0.0166,
+      "input": {
+        "left": false,
+        "right": true,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0841681,
+        "lng": -122.8583826
+      },
+      "mapCenter": {
+        "lat": 50.0841662,
+        "lng": -122.8583908,
+        "altitude": 2316.63
+      },
+      "mapRange": 55.65,
+      "mapHeading": 250.51
+    },
+    {
+      "tMs": 3650.4,
+      "dt": 0.1334,
+      "input": {
+        "left": false,
+        "right": true,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0841417,
+        "lng": -122.8585998
+      },
+      "mapCenter": {
+        "lat": 50.0841717,
+        "lng": -122.8583908,
+        "altitude": 2316.33
+      },
+      "mapRange": 38.93,
+      "mapHeading": 257.37
+    },
+    {
+      "tMs": 3767,
+      "dt": 0.1166,
+      "input": {
+        "left": false,
+        "right": true,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0841319,
+        "lng": -122.8587906
+      },
+      "mapCenter": {
+        "lat": 50.084127,
+        "lng": -122.8588573,
+        "altitude": 2305.89
+      },
+      "mapRange": 60.04,
+      "mapHeading": 263.51
+    },
+    {
+      "tMs": 3883.7,
+      "dt": 0.1167,
+      "input": {
+        "left": false,
+        "right": true,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0841358,
+        "lng": -122.8589797
+      },
+      "mapCenter": {
+        "lat": 50.0841358,
+        "lng": -122.8589797,
+        "altitude": 2304.55
+      },
+      "mapRange": 55,
+      "mapHeading": 269.86
+    },
+    {
+      "tMs": 3983.7,
+      "dt": 0.1,
+      "input": {
+        "left": false,
+        "right": true,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0841489,
+        "lng": -122.8591389
+      },
+      "mapCenter": {
+        "lat": 50.0841489,
+        "lng": -122.8591389,
+        "altitude": 2302.69
+      },
+      "mapRange": 55,
+      "mapHeading": 275.36
+    },
+    {
+      "tMs": 4100.4,
+      "dt": 0.1167,
+      "input": {
+        "left": false,
+        "right": true,
+        "gas": true,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0841775,
+        "lng": -122.8593177
+      },
+      "mapCenter": {
+        "lat": 50.0841775,
+        "lng": -122.8593177,
+        "altitude": 2302.26
+      },
+      "mapRange": 55,
+      "mapHeading": 282.04
+    },
+    {
+      "tMs": 4200.3,
+      "dt": 0.0999,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": false,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0842102,
+        "lng": -122.8594676
+      },
+      "mapCenter": {
+        "lat": 50.0842101,
+        "lng": -122.8594672,
+        "altitude": 2302.29
+      },
+      "mapRange": 54.97,
+      "mapHeading": 286.65
+    },
+    {
+      "tMs": 4317.1,
+      "dt": 0.1168,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": false,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.084254,
+        "lng": -122.859633
+      },
+      "mapCenter": {
+        "lat": 50.0842529,
+        "lng": -122.8596285,
+        "altitude": 2302.72
+      },
+      "mapRange": 54.64,
+      "mapHeading": 290.98
+    },
+    {
+      "tMs": 4333.7,
+      "dt": 0.0166,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": false,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0842603,
+        "lng": -122.8596563
+      },
+      "mapCenter": {
+        "lat": 50.0842603,
+        "lng": -122.8596563,
+        "altitude": 2302.78
+      },
+      "mapRange": 55,
+      "mapHeading": 291.52
+    },
+    {
+      "tMs": 4433.7,
+      "dt": 0.1,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": false,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0843015,
+        "lng": -122.8597911
+      },
+      "mapCenter": {
+        "lat": 50.0843015,
+        "lng": -122.8597911,
+        "altitude": 2303.98
+      },
+      "mapRange": 55,
+      "mapHeading": 294.41
+    },
+    {
+      "tMs": 4517,
+      "dt": 0.0833,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": false,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0843375,
+        "lng": -122.8598998
+      },
+      "mapCenter": {
+        "lat": 50.0843375,
+        "lng": -122.8598998,
+        "altitude": 2304.6
+      },
+      "mapRange": 55,
+      "mapHeading": 296.41
+    },
+    {
+      "tMs": 4617,
+      "dt": 0.1,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": false,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0843825,
+        "lng": -122.8600261
+      },
+      "mapCenter": {
+        "lat": 50.0843825,
+        "lng": -122.8600261,
+        "altitude": 2306.02
+      },
+      "mapRange": 55,
+      "mapHeading": 298.42
+    },
+    {
+      "tMs": 4717,
+      "dt": 0.1,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": false,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.084429,
+        "lng": -122.8601487
+      },
+      "mapCenter": {
+        "lat": 50.084429,
+        "lng": -122.8601487,
+        "altitude": 2307.85
+      },
+      "mapRange": 55,
+      "mapHeading": 300.06
+    },
+    {
+      "tMs": 4833.6,
+      "dt": 0.1166,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": false,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0844846,
+        "lng": -122.8602873
+      },
+      "mapCenter": {
+        "lat": 50.0844846,
+        "lng": -122.8602873,
+        "altitude": 2310.52
+      },
+      "mapRange": 55,
+      "mapHeading": 301.6
+    },
+    {
+      "tMs": 4950.3,
+      "dt": 0.1167,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": false,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0845411,
+        "lng": -122.8604223
+      },
+      "mapCenter": {
+        "lat": 50.0845411,
+        "lng": -122.8604223,
+        "altitude": 2314.31
+      },
+      "mapRange": 55,
+      "mapHeading": 302.82
+    },
+    {
+      "tMs": 5083.6,
+      "dt": 0.1333,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": false,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0846064,
+        "lng": -122.8605723
+      },
+      "mapCenter": {
+        "lat": 50.0846064,
+        "lng": -122.8605723,
+        "altitude": 2318
+      },
+      "mapRange": 55,
+      "mapHeading": 303.91
+    },
+    {
+      "tMs": 5217,
+      "dt": 0.1334,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": false,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.084672,
+        "lng": -122.8607187
+      },
+      "mapCenter": {
+        "lat": 50.084672,
+        "lng": -122.8607187,
+        "altitude": 2322.36
+      },
+      "mapRange": 55,
+      "mapHeading": 304.74
+    },
+    {
+      "tMs": 5333.6,
+      "dt": 0.1166,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": false,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0847294,
+        "lng": -122.8608443
+      },
+      "mapCenter": {
+        "lat": 50.0847294,
+        "lng": -122.8608443,
+        "altitude": 2326.59
+      },
+      "mapRange": 55,
+      "mapHeading": 305.31
+    },
+    {
+      "tMs": 5450.3,
+      "dt": 0.1167,
+      "input": {
+        "left": false,
+        "right": false,
+        "gas": false,
+        "reverse": false
+      },
+      "modelPos": {
+        "lat": 50.0847867,
+        "lng": -122.8609677
+      },
+      "mapCenter": {
+        "lat": 50.0847867,
+        "lng": -122.8609677,
+        "altitude": 2331.22
+      },
+      "mapRange": 55,
+      "mapHeading": 305.75
+    }
+  ]
+}

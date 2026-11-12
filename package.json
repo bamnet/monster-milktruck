@@ -8,6 +8,9 @@
     "build": "bun run build.ts",
     "test": "bun test src",
     "test:e2e": "playwright test",
+    "perf:report": "bun run scripts/perf-report.ts",
+    "bench:browser": "bun run scripts/bench-browser.ts",
+    "trace:record": "bun run scripts/record-trace.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
