@@ -20,11 +20,28 @@ const KEY_MAP: Record<string, keyof InputState> = {
   S: 'reverse',
 };
 
-export function createInput(): InputState {
+export interface InputDom {
+  win: EventTarget;
+  getElementById(id: string): EventTarget | null;
+}
+
+export function createInput(
+  dom: InputDom = {
+    win: window,
+    getElementById: (id) => document.getElementById(id),
+  },
+): InputState {
   const state: InputState = { left: false, right: false, gas: false, reverse: false };
 
-  const onKey = (down: boolean) => (e: KeyboardEvent) => {
-    const field = KEY_MAP[e.key];
+  const reset = () => {
+    state.left = false;
+    state.right = false;
+    state.gas = false;
+    state.reverse = false;
+  };
+
+  const onKey = (down: boolean) => (e: Event) => {
+    const field = KEY_MAP[(e as KeyboardEvent).key];
     if (!field) return;
     state[field] = down;
     e.preventDefault();
@@ -32,11 +49,12 @@ export function createInput(): InputState {
     e.stopImmediatePropagation();
   };
 
-  window.addEventListener('keydown', onKey(true), { capture: true });
-  window.addEventListener('keyup', onKey(false), { capture: true });
+  dom.win.addEventListener('keydown', onKey(true), { capture: true });
+  dom.win.addEventListener('keyup', onKey(false), { capture: true });
+  dom.win.addEventListener('blur', reset);
 
   const bindButton = (id: string, field: keyof InputState) => {
-    const el = document.getElementById(id);
+    const el = dom.getElementById(id);
     if (!el) return;
     const on = () => { state[field] = true; };
     const off = () => { state[field] = false; };
