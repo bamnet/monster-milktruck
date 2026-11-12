@@ -15,5 +15,5 @@
     "resolveJsonModule": true,
     "types": ["google.maps", "bun"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "e2e/**/*.ts", "playwright.config.ts"]
 }
