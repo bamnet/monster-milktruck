@@ -58,6 +58,7 @@ test.describe('Monster Milktruck browser smoke tests', () => {
       const fatal = page.locator('#fatal');
       await expect(fatal).toBeVisible();
       await expect(fatal).toContainText('GOOGLE_MAPS_API_KEY');
+      await expect(page.locator('#loading-screen')).toBeHidden();
       expect(errors).toEqual([]);
     } finally {
       await keylessApp.close();
@@ -76,14 +77,17 @@ test.describe('Monster Milktruck browser smoke tests', () => {
       const model = document.querySelector('gmp-model-3d') as google.maps.maps3d.Model3DElement;
       const pos = model.position as google.maps.LatLngAltitude;
       const fatal = document.getElementById('fatal');
+      const loadingScreen = document.getElementById('loading-screen');
       return {
         fatalHidden: Boolean(fatal?.hidden),
+        hasLoadingScreen: Boolean(loadingScreen),
         mode: String(map.mode),
         modelPos: { lat: pos.lat, lng: pos.lng },
       };
     });
 
     expect(initState.fatalHidden).toBe(true);
+    expect(initState.hasLoadingScreen).toBe(true);
     expect(initState.mode).toBe('SATELLITE');
     expect(horizontalDistanceMeters(initState.modelPos, PRESETS[0]!)).toBeLessThan(1);
 

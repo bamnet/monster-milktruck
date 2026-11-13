@@ -138,11 +138,23 @@ describe('Truck', () => {
     const input = createInputState();
     const popup = createFakePopup();
 
-    const truck = new Truck(map.element, model.element, input, popup, 'RELATIVE_TO_GROUND', START);
+    let readyCount = 0;
+    const truck = new Truck(
+      map.element,
+      model.element,
+      input,
+      popup,
+      'RELATIVE_TO_GROUND',
+      START,
+      () => {
+        readyCount++;
+      },
+    );
 
     expect(model.positionWrites).toHaveLength(1);
     expect(model.orientationWrites).toHaveLength(1);
     expect(map.flyCalls).toHaveLength(0);
+    expect(readyCount).toBe(0);
 
     // 60 stationary frames at 60 FPS should not mutate model or call flyCameraTo
     for (let i = 0; i < 60; i++) {
@@ -155,10 +167,12 @@ describe('Truck', () => {
     // Unsteady event should be ignored
     map.dispatchSteady(false);
     expect(map.flyCalls).toHaveLength(0);
+    expect(readyCount).toBe(0);
 
-    // First steady event snaps camera once, then unregisters listener
+    // First steady event snaps camera once, invokes onReady, then unregisters listener
     map.dispatchSteady(true);
     expect(map.flyCalls).toHaveLength(1);
+    expect(readyCount).toBe(1);
     expect(map.flyCalls[0]?.durationMillis).toBe(0);
     expect(map.flyCalls[0]?.endCamera.center).toEqual({
       lat: START.lat,
@@ -168,6 +182,7 @@ describe('Truck', () => {
 
     map.dispatchSteady(true);
     expect(map.flyCalls).toHaveLength(1);
+    expect(readyCount).toBe(1);
   });
 
   test('updates model.position without redundantly updating model.orientation when driving straight', () => {

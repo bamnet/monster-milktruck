@@ -86,6 +86,7 @@ export class Truck {
     private readonly popupEl: HTMLElement,
     private readonly altitudeMode: google.maps.maps3d.AltitudeModeString,
     start: TruckStart,
+    private readonly onReady?: () => void,
   ) {
     this.lat = start.lat;
     this.lng = start.lng;
@@ -111,6 +112,7 @@ export class Truck {
       if (this.lastCameraKey === initialCameraKey && performance.now() >= this.teleportUntil) {
         this.flyCameraToSelf(0, true);
       }
+      this.onReady?.();
     };
     this.map.addEventListener('gmp-steadychange', onInitialSteady);
   }

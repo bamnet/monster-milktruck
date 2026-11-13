@@ -16,6 +16,24 @@
 
     <div id="popup" class="popup" hidden></div>
 
+    <div id="loading-screen" class="loading-screen" role="status" aria-live="polite">
+      <div class="loading-card">
+        <div class="loading-title"><i>MONSTER MILKTRUCK!</i></div>
+        <svg class="loading-splines" viewBox="0 0 280 72" aria-hidden="true">
+          <path class="spline-path spline-back" d="M 0 52 Q 35 16, 70 46 T 140 38 T 210 50 T 280 28" />
+          <path class="spline-path spline-mid" d="M 0 42 Q 35 64, 70 32 T 140 48 T 210 24 T 280 44" />
+          <path class="spline-path spline-front" d="M 0 48 Q 35 18, 70 48 T 140 22 T 210 46 T 280 34" />
+          <circle class="spline-node spline-node-1" cx="70" cy="48" r="3.5" />
+          <circle class="spline-node spline-node-2" cx="140" cy="22" r="3.5" />
+          <circle class="spline-node spline-node-3" cx="210" cy="46" r="3.5" />
+        </svg>
+        <div class="loading-bar-track" aria-hidden="true">
+          <div id="loading-bar-fill" class="loading-bar-fill"></div>
+        </div>
+        <p id="loading-status" class="loading-status">Reticulating splines...</p>
+      </div>
+    </div>
+
     <div class="controls">
       <div class="left-controls">
         <div id="presets"></div>
