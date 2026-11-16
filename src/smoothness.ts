@@ -1,4 +1,4 @@
-import { degToRad, EARTH_RADIUS_M, fixAngle } from './math3d.ts';
+import { fixAngle, horizontalDistanceM } from './math3d.ts';
 
 export const DEFAULT_ANGLE_DEADBAND_DEG = 0.15;
 export const DEFAULT_ALT_DEADBAND_M = 0.02;
@@ -58,20 +58,6 @@ interface ChannelSummary {
   p95Jerk: number;
   maxJerk: number;
   signFlips: number;
-}
-
-function horizDistanceM(
-  aLat: number,
-  aLng: number,
-  bLat: number,
-  bLng: number,
-): number {
-  const dN = degToRad(bLat - aLat) * EARTH_RADIUS_M;
-  const dE =
-    degToRad(fixAngle(bLng - aLng)) *
-    EARTH_RADIUS_M *
-    Math.cos(degToRad((aLat + bLat) * 0.5));
-  return Math.hypot(dE, dN);
 }
 
 function nearestRankPercentile(sorted: readonly number[], p: number): number {
@@ -278,7 +264,10 @@ export function computeSmoothnessMetrics(
       Number.isFinite(cur.modelLat) &&
       Number.isFinite(cur.modelLng)
     ) {
-      const off = horizDistanceM(cur.modelLat, cur.modelLng, cur.camLat, cur.camLng);
+      const off = horizontalDistanceM(
+        { lat: cur.modelLat, lng: cur.modelLng },
+        { lat: cur.camLat, lng: cur.camLng },
+      );
       if (off > maxCamModelHorizOffsetM) maxCamModelHorizOffsetM = off;
     }
 

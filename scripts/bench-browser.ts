@@ -2,7 +2,7 @@ import { appendFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { buildAndServeApp, launchPlaywrightBrowser, loadEnvIfNeeded } from '../e2e/helpers.ts';
 import { PRESETS } from '../src/config.ts';
-import { degToRad, EARTH_RADIUS_M, fixAngle, offsetToLatLng } from '../src/math3d.ts';
+import { degToRad, horizontalDistanceM, offsetToLatLng } from '../src/math3d.ts';
 import {
   computeSmoothnessMetrics,
   type SmoothnessMetrics,
@@ -70,13 +70,6 @@ function resolveHeadlessFlag(): boolean {
     process.env.DISPLAY || process.env.WAYLAND_DISPLAY || process.platform === 'darwin',
   );
   return !hasDisplay;
-}
-
-function horizDistM(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
-  const dN = degToRad(b.lat - a.lat) * EARTH_RADIUS_M;
-  const dE =
-    degToRad(fixAngle(b.lng - a.lng)) * EARTH_RADIUS_M * Math.cos(degToRad((a.lat + b.lat) / 2));
-  return Math.hypot(dE, dN);
 }
 
 function nearestRankPercentile(sorted: readonly number[], p: number): number {
@@ -175,7 +168,7 @@ function summarizeCapture(preset: string, capture: RawBenchCapture): ScenarioMet
   const smoothnessSamples: SmoothnessSample[] = [];
 
   for (const s of samples) {
-    const rawCenterOff = horizDistM(s.modelPos, s.mapCenter);
+    const rawCenterOff = horizontalDistanceM(s.modelPos, s.mapCenter);
     if (rawCenterOff > rawCenterMaxOffsetM) rawCenterMaxOffsetM = rawCenterOff;
     if (Number.isFinite(s.mapRange) && s.mapRange < minMapRangeM) {
       minMapRangeM = s.mapRange;
@@ -201,7 +194,7 @@ function summarizeCapture(preset: string, capture: RawBenchCapture): ScenarioMet
         camLat = projected.lat;
         camLng = projected.lng;
         groundAlt = projected.groundAlt;
-        lagEyeSamples.push(horizDistM(s.modelPos, projected));
+        lagEyeSamples.push(horizontalDistanceM(s.modelPos, projected));
         if (groundAlt < minGroundAlt) minGroundAlt = groundAlt;
         if (groundAlt > maxGroundAlt) maxGroundAlt = groundAlt;
       }

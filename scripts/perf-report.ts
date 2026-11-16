@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import type { InputState } from '../src/input.ts';
-import { degToRad, EARTH_RADIUS_M, fixAngle, offsetToLatLng } from '../src/math3d.ts';
+import { degToRad, fixAngle, horizontalDistanceM, offsetToLatLng } from '../src/math3d.ts';
 import {
   computeSmoothnessMetrics,
   type SmoothnessMetrics,
@@ -213,13 +213,6 @@ function runStepMicrobench() {
   };
 }
 
-function distanceMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
-  const dN = degToRad(b.lat - a.lat) * EARTH_RADIUS_M;
-  const dE =
-    degToRad(fixAngle(b.lng - a.lng)) * EARTH_RADIUS_M * Math.cos(degToRad((a.lat + b.lat) / 2));
-  return Math.hypot(dE, dN);
-}
-
 function projectCameraTarget(
   camPos: LatLngAlt,
   headingDeg: number,
@@ -341,7 +334,7 @@ function summarizeTraces(): TraceSummary[] {
       });
     }
 
-    const drivenM = distanceMeters(trace.start, rig.modelPos);
+    const drivenM = horizontalDistanceM(trace.start, rig.modelPos);
     return {
       preset: trace.preset,
       frames: trace.frames.length,
