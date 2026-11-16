@@ -1,5 +1,6 @@
 import { clamp, degToRad, fixAngle, offsetToLatLng } from './math3d.ts';
 import type { InputState } from './input.ts';
+import { TerrainPitchTracker } from './terrain-pitch.ts';
 
 const TICK_MAX_DT = 0.25;
 const ACCEL = 50.0;
@@ -15,20 +16,23 @@ const DRAG_FACTOR = 0.00090;
 const CONSTANT_DRAG = 2.0;
 
 const STEER_ROLL = -1.0;
-const ROLL_SPRING = 0.5;
-const ROLL_DAMP = -0.16;
+const ROLL_SPRING_K = 30.0;
+const ROLL_DAMP_C = 9.6;
+const ROLL_MAX_SUBSTEP_S = 1 / 120;
 
 const CAM_TILT_DEG = 72;
 const CAM_RANGE_M = 55;
 const CAM_SMOOTH_TAU = 0.5;
 const TELEPORT_FLY_MS = 1200;
+const TELEPORT_SETTLE_CEILING_MS = 800;
+const TELEPORT_ANIM_END_EARLY_MS = 200;
 const CAMERA_IN_FLIGHT_MAX_MS = 50;
 
-// Offsets to reconcile the glb's local axes with Google Maps' orientation
-// convention (heading=tilt=roll=0 places the model in some default pose that
-// depends on how it was exported). Rotations apply in order: roll, tilt, heading.
+// The glb root node is upright (+X right, +Y forward, +Z up), matching Google Maps
+// Model3DElement's orientation convention (rotations apply in order: roll, tilt, heading)
+// without a 90° tilt offset. tilt < 0 pitches nose up (uphill), tilt > 0 pitches nose down.
 const MODEL_HEADING_OFFSET = 0;
-const MODEL_TILT_OFFSET = -90;
+const MODEL_TILT_OFFSET = 0;
 const MODEL_ROLL_OFFSET = 0;
 
 const IDLE_MESSAGES = [
@@ -69,15 +73,47 @@ export class Truck {
 
   private lastTime = 0;
   private running = false;
+  private rafId: number | null = null;
   private idleTimer = 0;
   private fastTimer = 0;
   private popupTimer = 0;
   private teleportUntil = 0;
+  private teleportPitchLockUntil = 0;
+  private awaitingTeleportAnimationEnd = false;
   private lastPositionKey = '';
   private lastOrientationKey = '';
   private lastCameraKey = '';
+  private readonly initialCameraKey: string;
   private cameraFlyInFlightUntil = 0;
   private initialSceneReady = false;
+  private listenersAttached = false;
+  private readonly fixedAltitude: boolean;
+  private readonly terrainPitch = new TerrainPitchTracker();
+
+  private readonly onCenterChange = (): void => {
+    this.cameraFlyInFlightUntil = 0;
+  };
+
+  private readonly onAnimationEnd = (): void => {
+    this.cameraFlyInFlightUntil = 0;
+    if (
+      this.awaitingTeleportAnimationEnd &&
+      performance.now() >= this.teleportUntil - TELEPORT_ANIM_END_EARLY_MS
+    ) {
+      this.awaitingTeleportAnimationEnd = false;
+    }
+  };
+
+  private readonly onInitialSteady = (e: Event): void => {
+    if (!(e as Event & { isSteady?: boolean }).isSteady) return;
+    this.initialSceneReady = true;
+    this.cameraFlyInFlightUntil = 0;
+    this.map.removeEventListener('gmp-steadychange', this.onInitialSteady);
+    if (this.lastCameraKey === this.initialCameraKey && performance.now() >= this.teleportUntil) {
+      this.flyCameraToSelf(0, true);
+    }
+    this.onReady?.();
+  };
 
   constructor(
     private readonly map: Map3D,
@@ -88,33 +124,22 @@ export class Truck {
     start: TruckStart,
     private readonly onReady?: () => void,
   ) {
+    this.fixedAltitude = altitudeMode === 'ABSOLUTE';
     this.lat = start.lat;
     this.lng = start.lng;
     this.heading = start.heading;
     this.camHeading = start.heading;
     this.applyModel();
 
-    const clearInFlight = () => {
-      this.cameraFlyInFlightUntil = 0;
-    };
-    this.map.addEventListener('gmp-centerchange', clearInFlight);
-    this.map.addEventListener('gmp-animationend', clearInFlight);
-
     // Wait for the initial scene to finish loading (gmp-steadychange) before
     // snapping the camera to RELATIVE_TO_GROUND.
-    const initialCameraKey = this.cameraKey();
-    this.lastCameraKey = initialCameraKey;
-    const onInitialSteady = (e: Event) => {
-      if (!(e as Event & { isSteady?: boolean }).isSteady) return;
-      this.initialSceneReady = true;
-      this.cameraFlyInFlightUntil = 0;
-      this.map.removeEventListener('gmp-steadychange', onInitialSteady);
-      if (this.lastCameraKey === initialCameraKey && performance.now() >= this.teleportUntil) {
-        this.flyCameraToSelf(0, true);
-      }
-      this.onReady?.();
-    };
-    this.map.addEventListener('gmp-steadychange', onInitialSteady);
+    this.initialCameraKey = this.cameraKey();
+    this.lastCameraKey = this.initialCameraKey;
+    this.attachMapListeners();
+  }
+
+  getPitchDeg(): number {
+    return this.fixedAltitude ? 0 : this.terrainPitch.pitchDeg;
   }
 
   teleportTo(lat: number, lng: number, heading = 0): void {
@@ -128,29 +153,45 @@ export class Truck {
     this.rollSpeed = 0;
     this.idleTimer = 0;
     this.fastTimer = 0;
+    this.terrainPitch.reset();
     this.applyModel();
     this.flyCameraToSelf(TELEPORT_FLY_MS);
-    this.teleportUntil = performance.now() + TELEPORT_FLY_MS;
+    const now = performance.now();
+    this.teleportUntil = now + TELEPORT_FLY_MS;
+    this.awaitingTeleportAnimationEnd = true;
+    this.teleportPitchLockUntil = now + TELEPORT_FLY_MS + TELEPORT_SETTLE_CEILING_MS;
   }
 
   start(): void {
+    if (!this.listenersAttached) {
+      this.attachMapListeners();
+    }
     this.running = true;
     this.lastTime = performance.now();
     const tick = (t: number) => {
       if (!this.running) return;
-      const dt = Math.min((t - this.lastTime) / 1000, TICK_MAX_DT);
+      const dt = clamp((t - this.lastTime) / 1000, 0, TICK_MAX_DT);
       this.lastTime = t;
       this.step(dt);
-      requestAnimationFrame(tick);
+      this.rafId = requestAnimationFrame(tick);
     };
-    requestAnimationFrame(tick);
+    this.rafId = requestAnimationFrame(tick);
   }
 
   stop(): void {
     this.running = false;
+    if (this.rafId !== null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(this.rafId);
+    }
+    this.rafId = null;
+    this.detachMapListeners();
   }
 
   step(dt: number): void {
+    if (!Number.isFinite(dt) || dt <= 0) return;
+
+    this.updateTerrainPitch(dt);
+
     const { left, right, gas, reverse } = this.input;
     const speed = Math.hypot(this.velE, this.velN);
 
@@ -223,18 +264,101 @@ export class Truck {
     }
 
     forwardSpeed = this.velE * dirE + this.velN * dirN;
-    this.rollSpeed += degToRad(steerDeg) * forwardSpeed * STEER_ROLL;
-    this.rollSpeed += ROLL_SPRING * -this.roll + ROLL_DAMP * this.rollSpeed;
-    this.roll += this.rollSpeed * dt;
-    this.roll = clamp(this.roll, -30, 30);
-    if (Math.abs(this.roll) < 0.001 && Math.abs(this.rollSpeed) < 0.001 && !left && !right) {
-      this.roll = 0;
-      this.rollSpeed = 0;
-    }
+    this.stepRoll(dt, steerDeg, forwardSpeed, left || right);
 
     this.applyModel();
     this.followCamera(dt);
     this.tickPopups(dt, Math.hypot(this.velE, this.velN));
+  }
+
+  private attachMapListeners(): void {
+    this.map.addEventListener('gmp-centerchange', this.onCenterChange);
+    this.map.addEventListener('gmp-animationend', this.onAnimationEnd);
+    if (!this.initialSceneReady) {
+      this.map.addEventListener('gmp-steadychange', this.onInitialSteady);
+    }
+    this.listenersAttached = true;
+  }
+
+  private detachMapListeners(): void {
+    if (!this.listenersAttached) return;
+    this.map.removeEventListener('gmp-centerchange', this.onCenterChange);
+    this.map.removeEventListener('gmp-animationend', this.onAnimationEnd);
+    this.map.removeEventListener('gmp-steadychange', this.onInitialSteady);
+    this.listenersAttached = false;
+  }
+
+  private readCameraPosition(): { lat: number; lng: number; altitude: number } | null {
+    const pos = this.map.cameraPosition;
+    if (!pos) return null;
+    const lat = pos.lat;
+    const lng = pos.lng;
+    const altitude = pos.altitude;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(altitude)) {
+      return null;
+    }
+    return { lat, lng, altitude };
+  }
+
+  private updateTerrainPitch(dt: number): void {
+    if (this.fixedAltitude || !this.initialSceneReady) return;
+    let teleporting = false;
+    if (this.teleportUntil > 0) {
+      const now = performance.now();
+      teleporting =
+        now < this.teleportUntil ||
+        (this.awaitingTeleportAnimationEnd && now < this.teleportPitchLockUntil);
+    }
+    if (teleporting) return;
+    const rawHeading = this.map.heading;
+    const rawTilt = this.map.tilt;
+    this.terrainPitch.update({
+      dt,
+      truckPos: { lat: this.lat, lng: this.lng },
+      headingDeg: this.heading,
+      speedMps: Math.hypot(this.velE, this.velN),
+      sceneReady: this.initialSceneReady,
+      teleporting: false,
+      cameraPosition: this.readCameraPosition(),
+      cameraHeadingDeg:
+        typeof rawHeading === 'number' && Number.isFinite(rawHeading)
+          ? rawHeading
+          : this.camHeading,
+      liveTiltDeg:
+        typeof rawTilt === 'number' && Number.isFinite(rawTilt) ? rawTilt : null,
+      targetRangeM: CAM_RANGE_M,
+      targetTiltDeg: CAM_TILT_DEG,
+    });
+  }
+
+  private stepRoll(
+    dt: number,
+    steerDeg: number,
+    forwardSpeed: number,
+    steering: boolean,
+  ): void {
+    if (!steering && steerDeg === 0 && this.roll === 0 && this.rollSpeed === 0) {
+      return;
+    }
+    const steerAccel = (degToRad(steerDeg) / dt) * forwardSpeed * STEER_ROLL;
+    const steps = Math.max(1, Math.ceil(dt / ROLL_MAX_SUBSTEP_S));
+    const subDt = dt / steps;
+    for (let i = 0; i < steps; i++) {
+      this.rollSpeed +=
+        (steerAccel - ROLL_SPRING_K * this.roll - ROLL_DAMP_C * this.rollSpeed) * subDt;
+      this.roll += this.rollSpeed * subDt;
+      if (this.roll < -30) {
+        this.roll = -30;
+        if (this.rollSpeed < 0) this.rollSpeed = 0;
+      } else if (this.roll > 30) {
+        this.roll = 30;
+        if (this.rollSpeed > 0) this.rollSpeed = 0;
+      }
+    }
+    if (!steering && Math.abs(this.roll) < 0.005 && Math.abs(this.rollSpeed) < 0.01) {
+      this.roll = 0;
+      this.rollSpeed = 0;
+    }
   }
 
   private applyModel(): void {
@@ -247,13 +371,16 @@ export class Truck {
     }
 
     const heading = roundAngle(fixAngle(this.heading + MODEL_HEADING_OFFSET));
+    const tilt = roundAngle(
+      fixAngle((this.fixedAltitude ? 0 : this.terrainPitch.pitchDeg) + MODEL_TILT_OFFSET),
+    );
     const roll = roundAngle(fixAngle(this.roll + MODEL_ROLL_OFFSET));
-    const oriKey = `${heading},${roll}`;
+    const oriKey = `${heading},${tilt},${roll}`;
     if (oriKey !== this.lastOrientationKey) {
       this.lastOrientationKey = oriKey;
       this.model.orientation = {
         heading,
-        tilt: MODEL_TILT_OFFSET,
+        tilt,
         roll,
       };
     }
@@ -340,7 +467,8 @@ function roundCoord(v: number): number {
 }
 
 function roundAngle(v: number): number {
-  return Math.round(v * 100) / 100;
+  const rounded = Math.round(v * 100) / 100;
+  return rounded === 0 ? 0 : rounded;
 }
 
 function pickRandom(arr: readonly string[]): string {
