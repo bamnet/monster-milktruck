@@ -985,6 +985,125 @@ describe('Truck', () => {
     }
   });
 
+  test('enables terrain pitch after teleporting or driving before initial gmp-steadychange ever fires', () => {
+    const whistler = { lat: 50.085734, lng: -122.855824, heading: 0 };
+    const slope15 = Math.tan(degToRad(15));
+    const groundAltAt = (pos: { lat: number; lng: number }) =>
+      2300 + degToRad(pos.lat - whistler.lat) * 6378137 * slope15;
+
+    let fakeNow = 10_000;
+    const origNow = performance.now;
+    performance.now = () => fakeNow;
+    try {
+      // 1. Teleport to a hilly preset without ever firing initial gmp-steadychange
+      const tpMap = createFakeMap();
+      const tpModel = createFakeModel();
+      const tpInput = createInputState();
+      tpMap.onFly = (opts) => {
+        const c = opts.endCamera.center;
+        if (!c) return;
+        const heading = opts.endCamera.heading ?? 0;
+        const tilt = opts.endCamera.tilt ?? 72;
+        const range = opts.endCamera.range ?? 55;
+        tpMap.heading = heading;
+        tpMap.tilt = tilt;
+        tpMap.cameraPosition = makeSyntheticEye(c, groundAltAt(c), heading, tilt, range);
+      };
+
+      const tpTruck = new Truck(
+        tpMap.element,
+        tpModel.element,
+        tpInput,
+        createFakePopup(),
+        'RELATIVE_TO_GROUND',
+        START,
+      );
+
+      // Deliberately do NOT dispatch gmp-steadychange before teleporting (e.g. 8 s loading fallback)
+      tpTruck.teleportTo(whistler.lat, whistler.lng, whistler.heading);
+      expect(tpTruck.getPitchDeg()).toBe(0);
+
+      // During teleport animation, pitch stays locked at 0
+      fakeNow += 600;
+      tpTruck.step(1 / 60);
+      expect(tpTruck.getPitchDeg()).toBe(0);
+
+      // Let teleport finish (animation end after 1200 ms flight), still with zero gmp-steadychange
+      fakeNow += 700;
+      tpMap.dispatchAnimationEnd();
+      tpTruck.step(1 / 60);
+      expect(tpTruck.getPitchDeg()).toBe(0);
+
+      // Drive uphill on the +15° slope and verify smooth nose-up pitch response
+      tpInput.gas = true;
+      let prevPitch = tpTruck.getPitchDeg();
+      let maxPitchStep = 0;
+      for (let i = 0; i < 180; i++) {
+        fakeNow += 1000 / 60;
+        tpTruck.step(1 / 60);
+        tpMap.dispatchCenterChange();
+        const curPitch = tpTruck.getPitchDeg();
+        maxPitchStep = Math.max(maxPitchStep, Math.abs(curPitch - prevPitch));
+        prevPitch = curPitch;
+      }
+
+      const tpOri = tpModel.orientationWrites[tpModel.orientationWrites.length - 1]!;
+      expect(tpTruck.getPitchDeg()).toBeLessThan(-5);
+      expect(tpTruck.getPitchDeg()).toBeLessThan(-14);
+      expect(tpTruck.getPitchDeg()).toBeGreaterThan(-16);
+      expect(tpOri.tilt).toBeCloseTo(tpTruck.getPitchDeg(), 1);
+      expect(maxPitchStep).toBeLessThan(2.0);
+
+      // 2. Drive forward directly without teleporting or ever firing initial gmp-steadychange
+      const driveMap = createFakeMap();
+      const driveModel = createFakeModel();
+      const driveInput = createInputState();
+      driveMap.onFly = (opts) => {
+        const c = opts.endCamera.center;
+        if (!c) return;
+        const heading = opts.endCamera.heading ?? 0;
+        const tilt = opts.endCamera.tilt ?? 72;
+        const range = opts.endCamera.range ?? 55;
+        driveMap.heading = heading;
+        driveMap.tilt = tilt;
+        driveMap.cameraPosition = makeSyntheticEye(c, groundAltAt(c), heading, tilt, range);
+      };
+
+      const driveTruck = new Truck(
+        driveMap.element,
+        driveModel.element,
+        driveInput,
+        createFakePopup(),
+        'RELATIVE_TO_GROUND',
+        whistler,
+      );
+
+      // Stationary before steady: camera untouched and pitch remains 0
+      for (let i = 0; i < 10; i++) {
+        fakeNow += 1000 / 60;
+        driveTruck.step(1 / 60);
+      }
+      expect(driveMap.flyCalls).toHaveLength(0);
+      expect(driveTruck.getPitchDeg()).toBe(0);
+
+      // Driving uphill issues RELATIVE_TO_GROUND flyCameraTo and unlocks terrain pitch
+      driveInput.gas = true;
+      for (let i = 0; i < 180; i++) {
+        fakeNow += 1000 / 60;
+        driveTruck.step(1 / 60);
+        driveMap.dispatchCenterChange();
+      }
+
+      const driveOri = driveModel.orientationWrites[driveModel.orientationWrites.length - 1]!;
+      expect(driveTruck.getPitchDeg()).toBeLessThan(-5);
+      expect(driveTruck.getPitchDeg()).toBeLessThan(-14);
+      expect(driveTruck.getPitchDeg()).toBeGreaterThan(-16);
+      expect(driveOri.tilt).toBeCloseTo(driveTruck.getPitchDeg(), 1);
+    } finally {
+      performance.now = origNow;
+    }
+  });
+
   test('keeps tilt strictly 0 in fixedAltitude (ABSOLUTE) mode even when cameraPosition climbs steep terrain', () => {
     const map = createFakeMap();
     const model = createFakeModel();

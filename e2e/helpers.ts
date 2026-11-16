@@ -169,6 +169,25 @@ export async function waitForMapReadyAndSteady(
   page: Page,
   expectedPresets: number,
 ): Promise<void> {
+  // Capture initial gmp-steadychange as early as possible so we detect if it
+  // fires while waiting for custom elements, without confusing the 8 s loading
+  // fallback timeout for true scene steadiness.
+  await page.evaluate(() => {
+    const win = window as unknown as {
+      __initialSteadySeen?: boolean;
+      __initialSteadyListening?: boolean;
+    };
+    if (win.__initialSteadyListening) return;
+    win.__initialSteadyListening = true;
+    const onDocSteady = (e: Event) => {
+      if ((e as Event & { isSteady?: boolean }).isSteady) {
+        win.__initialSteadySeen = true;
+        document.removeEventListener('gmp-steadychange', onDocSteady, true);
+      }
+    };
+    document.addEventListener('gmp-steadychange', onDocSteady, true);
+  });
+
   await page.waitForFunction(
     (count: number) => {
       if (!customElements.get('gmp-map-3d') || !customElements.get('gmp-model-3d')) {
@@ -194,20 +213,21 @@ export async function waitForMapReadyAndSteady(
   await page.evaluate(
     () =>
       new Promise<void>((resolve) => {
+        const win = window as unknown as { __initialSteadySeen?: boolean };
         const map = document.querySelector('gmp-map-3d') as
           | (google.maps.maps3d.Map3DElement & { isSteady?: boolean })
           | null;
-        const loading = document.getElementById('loading-screen');
-        if (!map || map.isSteady === true || loading?.hidden === true) {
+        if (!map || map.isSteady === true || win.__initialSteadySeen === true) {
           resolve();
           return;
         }
         const timer = window.setTimeout(() => {
           map.removeEventListener('gmp-steadychange', onSteady);
           resolve();
-        }, 12_000);
+        }, 15_000);
         const onSteady = (e: Event) => {
           if ((e as Event & { isSteady?: boolean }).isSteady) {
+            win.__initialSteadySeen = true;
             window.clearTimeout(timer);
             map.removeEventListener('gmp-steadychange', onSteady);
             resolve();
@@ -226,8 +246,10 @@ export async function teleportToPresetAndWaitSteady(
   page: Page,
   preset: { label: string; lat: number; lng: number },
 ): Promise<void> {
-  await page.evaluate(() => {
-    const map = document.querySelector('gmp-map-3d') as google.maps.maps3d.Map3DElement;
+  await page.evaluate((target: { lat: number; lng: number }) => {
+    const map = document.querySelector('gmp-map-3d') as google.maps.maps3d.Map3DElement & {
+      cameraPosition?: google.maps.LatLngAltitude | null;
+    };
     const win = window as unknown as {
       __teleportState?: {
         steadySeen: boolean;
@@ -244,7 +266,15 @@ export async function teleportToPresetAndWaitSteady(
       cleanup: () => {},
     };
     const onSteady = (e: Event) => {
-      if ((e as Event & { isSteady?: boolean }).isSteady) {
+      if (!(e as Event & { isSteady?: boolean }).isSteady) return;
+      const cp = map.cameraPosition;
+      if (
+        cp &&
+        Number.isFinite(cp.lat) &&
+        Number.isFinite(cp.lng) &&
+        Math.abs(cp.lat - target.lat) < 0.002 &&
+        Math.abs(cp.lng - target.lng) < 0.002
+      ) {
         state.steadySeen = true;
       }
     };
@@ -258,7 +288,7 @@ export async function teleportToPresetAndWaitSteady(
       map.removeEventListener('gmp-animationend', onAnimEnd);
     };
     win.__teleportState = state;
-  });
+  }, { lat: preset.lat, lng: preset.lng });
 
   await page.locator('#presets button', { hasText: preset.label }).click();
 
@@ -283,8 +313,8 @@ export async function teleportToPresetAndWaitSteady(
           Number.isFinite(cp.lat) &&
           Number.isFinite(cp.lng) &&
           Number.isFinite(cp.altitude) &&
-          Math.abs(cp.lat - target.lat) < 0.01 &&
-          Math.abs(cp.lng - target.lng) < 0.01 &&
+          Math.abs(cp.lat - target.lat) < 0.002 &&
+          Math.abs(cp.lng - target.lng) < 0.002 &&
           Math.abs(cp.altitude) >= 0.01,
       );
       // Wait for teleport flight + post-teleport pitch lock ceiling (1200 + 800 ms) or animation end past flight

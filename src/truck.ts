@@ -86,6 +86,7 @@ export class Truck {
   private readonly initialCameraKey: string;
   private cameraFlyInFlightUntil = 0;
   private initialSceneReady = false;
+  private terrainPitchReady = false;
   private listenersAttached = false;
   private readonly fixedAltitude: boolean;
   private readonly terrainPitch = new TerrainPitchTracker();
@@ -107,6 +108,7 @@ export class Truck {
   private readonly onInitialSteady = (e: Event): void => {
     if (!(e as Event & { isSteady?: boolean }).isSteady) return;
     this.initialSceneReady = true;
+    this.terrainPitchReady = true;
     this.cameraFlyInFlightUntil = 0;
     this.map.removeEventListener('gmp-steadychange', this.onInitialSteady);
     if (this.lastCameraKey === this.initialCameraKey && performance.now() >= this.teleportUntil) {
@@ -301,7 +303,7 @@ export class Truck {
   }
 
   private updateTerrainPitch(dt: number): void {
-    if (this.fixedAltitude || !this.initialSceneReady) return;
+    if (this.fixedAltitude || !this.terrainPitchReady) return;
     let teleporting = false;
     if (this.teleportUntil > 0) {
       const now = performance.now();
@@ -317,7 +319,7 @@ export class Truck {
       truckPos: { lat: this.lat, lng: this.lng },
       headingDeg: this.heading,
       speedMps: Math.hypot(this.velE, this.velN),
-      sceneReady: this.initialSceneReady,
+      sceneReady: this.terrainPitchReady,
       teleporting: false,
       cameraPosition: this.readCameraPosition(),
       cameraHeadingDeg:
@@ -423,6 +425,9 @@ export class Truck {
       },
       durationMillis,
     });
+    if (this.altitudeMode === 'RELATIVE_TO_GROUND') {
+      this.terrainPitchReady = true;
+    }
   }
 
   private tickPopups(dt: number, speed: number): void {
