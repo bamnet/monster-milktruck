@@ -3,9 +3,17 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import type { InputState } from '../src/input.ts';
-import { degToRad, fixAngle } from '../src/math3d.ts';
-import type { TerrainTrace } from '../src/trace-types.ts';
+import { degToRad, EARTH_RADIUS_M, fixAngle, offsetToLatLng } from '../src/math3d.ts';
+import {
+  computeSmoothnessMetrics,
+  type SmoothnessMetrics,
+  type SmoothnessSample,
+} from '../src/smoothness.ts';
+import type { LatLngAlt, TerrainTrace } from '../src/trace-types.ts';
 import { Truck } from '../src/truck.ts';
+
+const DEFAULT_CAM_TILT_DEG = 72;
+const DEFAULT_CAM_RANGE_M = 55;
 
 interface BundleAssetStat {
   name: string;
@@ -54,18 +62,29 @@ function createBenchRig(start: { lat: number; lng: number; heading: number }) {
   let posWrites = 0;
   let oriWrites = 0;
   let lastCamHeading = start.heading;
+  let lastCamRange = DEFAULT_CAM_RANGE_M;
+  let lastCamTilt = DEFAULT_CAM_TILT_DEG;
+  let lastCamCenter: LatLngAlt = { lat: start.lat, lng: start.lng, altitude: 0 };
   const camHeadings: number[] = [];
 
-  const mapState: { center: google.maps.LatLngAltitudeLiteral; range: number } = {
+  const mapState: {
+    center: LatLngAlt;
+    range: number;
+    heading: number;
+    tilt: number;
+    cameraPosition?: LatLngAlt;
+  } = {
     center: { lat: start.lat, lng: start.lng, altitude: 0 },
-    range: 55,
+    range: DEFAULT_CAM_RANGE_M,
+    heading: start.heading,
+    tilt: DEFAULT_CAM_TILT_DEG,
   };
 
   const map = {
     get center() {
       return mapState.center;
     },
-    set center(v: google.maps.LatLngAltitudeLiteral) {
+    set center(v: LatLngAlt) {
       mapState.center = v;
     },
     get range() {
@@ -74,9 +93,30 @@ function createBenchRig(start: { lat: number; lng: number; heading: number }) {
     set range(v: number) {
       mapState.range = v;
     },
+    get heading() {
+      return mapState.heading;
+    },
+    set heading(v: number) {
+      mapState.heading = v;
+    },
+    get tilt() {
+      return mapState.tilt;
+    },
+    set tilt(v: number) {
+      mapState.tilt = v;
+    },
+    get cameraPosition() {
+      return mapState.cameraPosition;
+    },
     flyCameraTo(opts: google.maps.maps3d.FlyToAnimationOptions) {
       flyCount++;
       lastCamHeading = opts.endCamera.heading ?? lastCamHeading;
+      lastCamRange = opts.endCamera.range ?? lastCamRange;
+      lastCamTilt = opts.endCamera.tilt ?? lastCamTilt;
+      if (opts.endCamera.center) {
+        const c = opts.endCamera.center as google.maps.LatLngAltitudeLiteral;
+        lastCamCenter = { lat: c.lat, lng: c.lng, altitude: c.altitude ?? 0 };
+      }
     },
     addEventListener: target.addEventListener.bind(target),
     removeEventListener: target.removeEventListener.bind(target),
@@ -84,7 +124,7 @@ function createBenchRig(start: { lat: number; lng: number; heading: number }) {
   } as unknown as google.maps.maps3d.Map3DElement;
 
   let curPos: google.maps.LatLngAltitudeLiteral = { lat: start.lat, lng: start.lng, altitude: 0 };
-  let curOri: google.maps.Orientation3DLiteral = { heading: start.heading, tilt: -90, roll: 0 };
+  let curOri: google.maps.Orientation3DLiteral = { heading: start.heading, tilt: 0, roll: 0 };
   const model = {
     get position() {
       return curPos;
@@ -116,8 +156,20 @@ function createBenchRig(start: { lat: number; lng: number; heading: number }) {
     recordCamHeading() {
       camHeadings.push(lastCamHeading);
     },
+    get lastFlyRange() {
+      return lastCamRange;
+    },
+    get lastFlyTilt() {
+      return lastCamTilt;
+    },
+    get lastFlyCenter() {
+      return lastCamCenter;
+    },
     get modelPos() {
       return curPos;
+    },
+    get modelOri() {
+      return curOri;
     },
     get counts() {
       return { flyCount, posWrites, oriWrites };
@@ -162,13 +214,43 @@ function runStepMicrobench() {
 }
 
 function distanceMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
-  const mPerDeg = 111_319.9;
-  const dN = (b.lat - a.lat) * mPerDeg;
-  const dE = (b.lng - a.lng) * mPerDeg * Math.cos(degToRad((a.lat + b.lat) / 2));
+  const dN = degToRad(b.lat - a.lat) * EARTH_RADIUS_M;
+  const dE =
+    degToRad(fixAngle(b.lng - a.lng)) * EARTH_RADIUS_M * Math.cos(degToRad((a.lat + b.lat) / 2));
   return Math.hypot(dE, dN);
 }
 
-function summarizeTraces() {
+function projectCameraTarget(
+  camPos: LatLngAlt,
+  headingDeg: number,
+  tiltDeg: number,
+  rangeM: number,
+  camAltOffsetM: number,
+): { lat: number; lng: number; groundAlt: number } {
+  const tiltRad = degToRad(tiltDeg);
+  const hRad = degToRad(headingDeg);
+  const horizM = rangeM * Math.sin(tiltRad);
+  const target = offsetToLatLng(
+    camPos.lat,
+    camPos.lng,
+    horizM * Math.sin(hRad),
+    horizM * Math.cos(hRad),
+  );
+  const groundAlt = camPos.altitude - rangeM * Math.cos(tiltRad) - camAltOffsetM;
+  return { lat: target.lat, lng: target.lng, groundAlt };
+}
+
+interface TraceSummary {
+  preset: string;
+  frames: number;
+  drivenM: number;
+  altSpanM: number;
+  maxCamRateDegPerSec: number;
+  maxCamJerkDegPerSec2: number;
+  smoothness: SmoothnessMetrics;
+}
+
+function summarizeTraces(): TraceSummary[] {
   const traceDir = join(process.cwd(), 'testdata', 'traces');
   let files: string[] = [];
   try {
@@ -185,6 +267,7 @@ function summarizeTraces() {
     let maxCamRateDegPerSec = 0;
     let prevRate = 0;
     let maxCamJerkDegPerSec2 = 0;
+    const smoothnessSamples: SmoothnessSample[] = [];
 
     for (const f of trace.frames) {
       rig.input.left = f.input.left;
@@ -193,7 +276,13 @@ function summarizeTraces() {
       rig.input.reverse = f.input.reverse;
       rig.mapState.center = f.mapCenter;
       rig.mapState.range = f.mapRange;
+      rig.mapState.heading = f.mapHeading;
+      rig.mapState.tilt = f.mapTilt ?? DEFAULT_CAM_TILT_DEG;
+      rig.mapState.cameraPosition = f.cameraPosition;
       rig.target.dispatchEvent(new Event('gmp-centerchange'));
+      if (f.cameraPosition) {
+        rig.target.dispatchEvent(new Event('gmp-camerapositionchange'));
+      }
 
       const prevHeading = rig.camHeadings[rig.camHeadings.length - 1] ?? trace.start.heading;
       rig.truck.step(f.dt);
@@ -209,8 +298,47 @@ function summarizeTraces() {
         prevRate = rate;
       }
 
-      if (f.mapCenter.altitude < minAlt) minAlt = f.mapCenter.altitude;
-      if (f.mapCenter.altitude > maxAlt) maxAlt = f.mapCenter.altitude;
+      const liveTilt = f.mapTilt ?? rig.lastFlyTilt;
+      const projected =
+        f.cameraPosition && Math.abs(f.cameraPosition.altitude) >= 0.01
+          ? projectCameraTarget(
+              f.cameraPosition,
+              f.mapHeading,
+              liveTilt,
+              rig.lastFlyRange,
+              rig.lastFlyCenter.altitude,
+            )
+          : undefined;
+
+      const groundAlt =
+        f.groundAltitude !== undefined && Number.isFinite(f.groundAltitude)
+          ? f.groundAltitude
+          : projected?.groundAlt;
+
+      const sampleAlt = groundAlt ?? f.mapCenter.altitude;
+      if (Number.isFinite(sampleAlt)) {
+        if (sampleAlt < minAlt) minAlt = sampleAlt;
+        if (sampleAlt > maxAlt) maxAlt = sampleAlt;
+      }
+
+      const modelRelAlt = rig.modelPos.altitude ?? 0;
+      const modelAlt = groundAlt !== undefined ? groundAlt + modelRelAlt : modelRelAlt;
+      const camTarget = projected ?? rig.lastFlyCenter;
+
+      smoothnessSamples.push({
+        tMs: f.tMs,
+        dtS: f.dt,
+        modelLat: rig.modelPos.lat,
+        modelLng: rig.modelPos.lng,
+        modelAlt,
+        headingDeg: rig.modelOri.heading ?? 0,
+        tiltDeg: rig.modelOri.tilt ?? 0,
+        rollDeg: rig.modelOri.roll ?? 0,
+        camLat: camTarget.lat,
+        camLng: camTarget.lng,
+        camAlt: f.cameraPosition?.altitude,
+        groundAlt,
+      });
     }
 
     const drivenM = distanceMeters(trace.start, rig.modelPos);
@@ -221,6 +349,7 @@ function summarizeTraces() {
       altSpanM: Number.isFinite(minAlt) ? maxAlt - minAlt : 0,
       maxCamRateDegPerSec,
       maxCamJerkDegPerSec2,
+      smoothness: computeSmoothnessMetrics(smoothnessSamples),
     };
   });
 }
@@ -252,12 +381,12 @@ async function main(): Promise<void> {
     lines.push(
       '',
       '### Recorded Terrain Trace Replay Smoothness',
-      '| Trace | Frames | Distance (m) | Terrain ΔAlt (m) | Max Cam Rate (°/s) | Max Cam Jerk (°/s²) |',
-      '| --- | ---: | ---: | ---: | ---: | ---: |',
-      ...traces.map(
-        (t) =>
-          `| ${t.preset} | ${t.frames} | ${t.drivenM.toFixed(1)} | ${t.altSpanM.toFixed(1)} | ${t.maxCamRateDegPerSec.toFixed(1)} | ${t.maxCamJerkDegPerSec2.toFixed(0)} |`,
-      ),
+      '| Trace | Frames | Distance (m) | Terrain ΔAlt (m) | Max Cam Rate (°/s) | Max Cam Jerk (°/s²) | Max ΔTilt (°) | Max Tilt Rate (°/s) | p95 Tilt Jerk (°/s³) | Tilt Flips | Max ΔRoll (°) | Max Roll Rate (°/s) | p95 Roll Jerk (°/s³) | Roll Flips | Cam-Model Offset (m) |',
+      '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+      ...traces.map((t) => {
+        const sm = t.smoothness;
+        return `| ${t.preset} | ${t.frames} | ${t.drivenM.toFixed(1)} | ${t.altSpanM.toFixed(1)} | ${t.maxCamRateDegPerSec.toFixed(1)} | ${t.maxCamJerkDegPerSec2.toFixed(0)} | ${sm.maxTiltStepDeg.toFixed(2)} | ${sm.maxTiltRateDegS.toFixed(1)} | ${sm.p95TiltJerkDegS3.toFixed(0)} | ${sm.tiltSignFlips} | ${sm.maxRollStepDeg.toFixed(2)} | ${sm.maxRollRateDegS.toFixed(1)} | ${sm.p95RollJerkDegS3.toFixed(0)} | ${sm.rollSignFlips} | ${sm.maxCamModelHorizOffsetM.toFixed(2)} |`;
+      }),
     );
   }
 
