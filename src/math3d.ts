@@ -12,6 +12,10 @@ export function degToRad(d: number): number {
   return (d * Math.PI) / 180;
 }
 
+export function radToDeg(r: number): number {
+  return (r * 180) / Math.PI;
+}
+
 export function offsetToLatLng(
   lat: number,
   lng: number,
@@ -22,4 +26,16 @@ export function offsetToLatLng(
   const cosLat = Math.max(Math.abs(Math.cos(degToRad(lat))), 1e-6);
   const dLng = (east / (EARTH_RADIUS_M * cosLat)) * (180 / Math.PI);
   return { lat: nextLat, lng: fixAngle(lng + dLng) };
+}
+
+export function horizontalDistanceM(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number },
+): number {
+  const dLat = degToRad(b.lat - a.lat);
+  const dLng = degToRad(fixAngle(b.lng - a.lng));
+  const midLat = degToRad((a.lat + b.lat) / 2);
+  const north = dLat * EARTH_RADIUS_M;
+  const east = dLng * EARTH_RADIUS_M * Math.cos(midLat);
+  return Math.hypot(east, north);
 }

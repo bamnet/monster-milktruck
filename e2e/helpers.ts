@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
 import { chromium, type Browser, type Page } from '@playwright/test';
+import { horizontalDistanceM } from '../src/math3d.ts';
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -156,9 +157,212 @@ export function horizontalDistanceMeters(
   a: { lat: number; lng: number },
   b: { lat: number; lng: number },
 ): number {
-  const metersPerDegLat = 111_319.9;
-  const dN = (b.lat - a.lat) * metersPerDegLat;
-  const midLatRad = (((a.lat + b.lat) / 2) * Math.PI) / 180;
-  const dE = (b.lng - a.lng) * metersPerDegLat * Math.cos(midLatRad);
-  return Math.hypot(dE, dN);
+  return horizontalDistanceM(a, b);
+}
+
+/**
+ * Waits for `gmp-map-3d` and `gmp-model-3d` custom elements to upgrade, mount
+ * the initial model position, render preset buttons, and fire initial
+ * `gmp-steadychange` (bounded by timeout for headless software WebGL).
+ */
+export async function waitForMapReadyAndSteady(
+  page: Page,
+  expectedPresets: number,
+): Promise<void> {
+  // Capture initial gmp-steadychange as early as possible so we detect if it
+  // fires while waiting for custom elements, without confusing the 8 s loading
+  // fallback timeout for true scene steadiness.
+  await page.evaluate(() => {
+    const win = window as unknown as {
+      __initialSteadySeen?: boolean;
+      __initialSteadyListening?: boolean;
+    };
+    if (win.__initialSteadyListening) return;
+    win.__initialSteadyListening = true;
+    const onDocSteady = (e: Event) => {
+      if ((e as Event & { isSteady?: boolean }).isSteady) {
+        win.__initialSteadySeen = true;
+        document.removeEventListener('gmp-steadychange', onDocSteady, true);
+      }
+    };
+    document.addEventListener('gmp-steadychange', onDocSteady, true);
+  });
+
+  await page.waitForFunction(
+    (count: number) => {
+      if (!customElements.get('gmp-map-3d') || !customElements.get('gmp-model-3d')) {
+        return false;
+      }
+      const map = document.querySelector('gmp-map-3d') as
+        | (google.maps.maps3d.Map3DElement & { flyCameraTo?: unknown })
+        | null;
+      const model = document.querySelector('gmp-model-3d') as
+        | google.maps.maps3d.Model3DElement
+        | null;
+      if (!map || !model || typeof map.flyCameraTo !== 'function') return false;
+      const pos = model.position as google.maps.LatLngAltitude | null;
+      return (
+        Boolean(pos && Number.isFinite(pos.lat) && Number.isFinite(pos.lng)) &&
+        document.querySelectorAll('#presets button').length === count
+      );
+    },
+    expectedPresets,
+    { timeout: 25_000 },
+  );
+
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        const win = window as unknown as { __initialSteadySeen?: boolean };
+        const map = document.querySelector('gmp-map-3d') as
+          | (google.maps.maps3d.Map3DElement & { isSteady?: boolean })
+          | null;
+        if (!map || map.isSteady === true || win.__initialSteadySeen === true) {
+          resolve();
+          return;
+        }
+        const timer = window.setTimeout(() => {
+          map.removeEventListener('gmp-steadychange', onSteady);
+          resolve();
+        }, 15_000);
+        const onSteady = (e: Event) => {
+          if ((e as Event & { isSteady?: boolean }).isSteady) {
+            win.__initialSteadySeen = true;
+            window.clearTimeout(timer);
+            map.removeEventListener('gmp-steadychange', onSteady);
+            resolve();
+          }
+        };
+        map.addEventListener('gmp-steadychange', onSteady);
+      }),
+  );
+}
+
+/**
+ * Clicks a preset button to teleport, waits for model and camera eye arrival,
+ * waits for `gmp-steadychange` / teleport lock expiry, and lets terrain settle.
+ */
+export async function teleportToPresetAndWaitSteady(
+  page: Page,
+  preset: { label: string; lat: number; lng: number },
+): Promise<void> {
+  await page.evaluate((target: { lat: number; lng: number }) => {
+    const map = document.querySelector('gmp-map-3d') as google.maps.maps3d.Map3DElement & {
+      cameraPosition?: google.maps.LatLngAltitude | null;
+    };
+    const win = window as unknown as {
+      __teleportState?: {
+        steadySeen: boolean;
+        animEnded: boolean;
+        startMs: number;
+        cleanup: () => void;
+      };
+    };
+    win.__teleportState?.cleanup();
+    const state = {
+      steadySeen: false,
+      animEnded: false,
+      startMs: performance.now(),
+      cleanup: () => {},
+    };
+    const onSteady = (e: Event) => {
+      if (!(e as Event & { isSteady?: boolean }).isSteady) return;
+      const cp = map.cameraPosition;
+      if (
+        cp &&
+        Number.isFinite(cp.lat) &&
+        Number.isFinite(cp.lng) &&
+        Math.abs(cp.lat - target.lat) < 0.002 &&
+        Math.abs(cp.lng - target.lng) < 0.002
+      ) {
+        state.steadySeen = true;
+      }
+    };
+    const onAnimEnd = () => {
+      state.animEnded = true;
+    };
+    map.addEventListener('gmp-steadychange', onSteady);
+    map.addEventListener('gmp-animationend', onAnimEnd);
+    state.cleanup = () => {
+      map.removeEventListener('gmp-steadychange', onSteady);
+      map.removeEventListener('gmp-animationend', onAnimEnd);
+    };
+    win.__teleportState = state;
+  }, { lat: preset.lat, lng: preset.lng });
+
+  await page.locator('#presets button', { hasText: preset.label }).click();
+
+  await page.waitForFunction(
+    (target: { lat: number; lng: number }) => {
+      const map = document.querySelector('gmp-map-3d') as google.maps.maps3d.Map3DElement & {
+        cameraPosition?: google.maps.LatLngAltitude | null;
+      };
+      const model = document.querySelector('gmp-model-3d') as google.maps.maps3d.Model3DElement;
+      const pos = model.position as google.maps.LatLngAltitude | null;
+      const cp = map.cameraPosition;
+      const win = window as unknown as {
+        __teleportState?: { steadySeen: boolean; animEnded: boolean; startMs: number };
+      };
+      const st = win.__teleportState;
+      const elapsed = st ? performance.now() - st.startMs : 0;
+      const nearModel = Boolean(
+        pos && Math.abs(pos.lat - target.lat) < 0.002 && Math.abs(pos.lng - target.lng) < 0.002,
+      );
+      const nearEye = Boolean(
+        cp &&
+          Number.isFinite(cp.lat) &&
+          Number.isFinite(cp.lng) &&
+          Number.isFinite(cp.altitude) &&
+          Math.abs(cp.lat - target.lat) < 0.002 &&
+          Math.abs(cp.lng - target.lng) < 0.002 &&
+          Math.abs(cp.altitude) >= 0.01,
+      );
+      // Wait for teleport flight + post-teleport pitch lock ceiling (1200 + 800 ms) or animation end past flight
+      const lockCleared = elapsed >= 2_100 || (Boolean(st?.animEnded) && elapsed >= 1_250);
+      return nearModel && nearEye && lockCleared;
+    },
+    { lat: preset.lat, lng: preset.lng },
+    { timeout: 18_000 },
+  );
+
+  // Wait briefly for post-teleport gmp-steadychange if not yet seen, then clean up listeners.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        const map = document.querySelector('gmp-map-3d') as
+          | (google.maps.maps3d.Map3DElement & { isSteady?: boolean })
+          | null;
+        const win = window as unknown as {
+          __teleportState?: { steadySeen: boolean; cleanup: () => void };
+        };
+        const finish = () => {
+          win.__teleportState?.cleanup();
+          resolve();
+        };
+        if (!map || map.isSteady === true || win.__teleportState?.steadySeen) {
+          finish();
+          return;
+        }
+        const timer = window.setTimeout(() => {
+          map.removeEventListener('gmp-steadychange', onSteady);
+          finish();
+        }, 4_000);
+        const onSteady = (e: Event) => {
+          if ((e as Event & { isSteady?: boolean }).isSteady) {
+            window.clearTimeout(timer);
+            map.removeEventListener('gmp-steadychange', onSteady);
+            finish();
+          }
+        };
+        map.addEventListener('gmp-steadychange', onSteady);
+      }),
+  );
+
+  // Allow a couple of settled rAF frames so stationary terrain anchor refreshes cleanly.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
 }

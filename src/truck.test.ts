@@ -1,12 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import type { InputState } from './input.ts';
-import { degToRad, fixAngle } from './math3d.ts';
+import { degToRad, fixAngle, horizontalDistanceM, offsetToLatLng } from './math3d.ts';
 import { Truck } from './truck.ts';
 
 interface FakeMap {
   flyCalls: google.maps.maps3d.FlyToAnimationOptions[];
   center: google.maps.LatLngAltitudeLiteral;
+  cameraPosition: { lat: number; lng: number; altitude: number } | null;
+  heading: number | null;
+  tilt: number | null;
   range: number;
+  activeListeners: Map<string, Set<EventListenerOrEventListenerObject>>;
+  onFly?: (options: google.maps.maps3d.FlyToAnimationOptions) => void;
   dispatchSteady(isSteady: boolean): void;
   dispatchCenterChange(): void;
   dispatchAnimationEnd(): void;
@@ -19,11 +24,65 @@ interface FakeModel {
   element: google.maps.maps3d.Model3DElement;
 }
 
+/**
+ * Simulates Google Maps 3D `LatLngAltitude` whose lat/lng/altitude are prototype
+ * getters (non-enumerable own properties) rather than plain object fields.
+ */
+class FakeLatLngAltitude {
+  constructor(
+    private readonly _lat: number,
+    private readonly _lng: number,
+    private readonly _altitude: number,
+  ) {}
+  get lat(): number {
+    return this._lat;
+  }
+  get lng(): number {
+    return this._lng;
+  }
+  get altitude(): number {
+    return this._altitude;
+  }
+}
+
+function makeSyntheticEye(
+  target: { lat: number; lng: number },
+  groundAltM: number,
+  headingDeg: number,
+  tiltDeg = 72,
+  rangeM = 55,
+): FakeLatLngAltitude {
+  const horizRange = rangeM * Math.sin(degToRad(tiltDeg));
+  const hRad = degToRad(headingDeg);
+  const eye = offsetToLatLng(
+    target.lat,
+    target.lng,
+    -horizRange * Math.sin(hRad),
+    -horizRange * Math.cos(hRad),
+  );
+  return new FakeLatLngAltitude(
+    eye.lat,
+    eye.lng,
+    groundAltM + rangeM * Math.cos(degToRad(tiltDeg)),
+  );
+}
+
 function createFakeMap(): FakeMap {
   const target = new EventTarget();
   const flyCalls: google.maps.maps3d.FlyToAnimationOptions[] = [];
-  const state: { center: google.maps.LatLngAltitudeLiteral; range: number } = {
+  const activeListeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
+  const state: {
+    center: google.maps.LatLngAltitudeLiteral;
+    cameraPosition: { lat: number; lng: number; altitude: number } | null;
+    heading: number | null;
+    tilt: number | null;
+    range: number;
+    onFly?: (options: google.maps.maps3d.FlyToAnimationOptions) => void;
+  } = {
     center: { lat: 0, lng: 0, altitude: 0 },
+    cameraPosition: null,
+    heading: null,
+    tilt: null,
     range: 55,
   };
 
@@ -34,6 +93,24 @@ function createFakeMap(): FakeMap {
     set center(val: google.maps.LatLngAltitudeLiteral) {
       state.center = val;
     },
+    get cameraPosition() {
+      return state.cameraPosition;
+    },
+    set cameraPosition(val: { lat: number; lng: number; altitude: number } | null) {
+      state.cameraPosition = val;
+    },
+    get heading() {
+      return state.heading;
+    },
+    set heading(val: number | null) {
+      state.heading = val;
+    },
+    get tilt() {
+      return state.tilt;
+    },
+    set tilt(val: number | null) {
+      state.tilt = val;
+    },
     get range() {
       return state.range;
     },
@@ -42,25 +119,74 @@ function createFakeMap(): FakeMap {
     },
     flyCameraTo(options: google.maps.maps3d.FlyToAnimationOptions) {
       flyCalls.push(options);
+      state.onFly?.(options);
     },
-    addEventListener: target.addEventListener.bind(target),
-    removeEventListener: target.removeEventListener.bind(target),
+    addEventListener(
+      type: string,
+      listener: EventListenerOrEventListenerObject | null,
+      options?: boolean | AddEventListenerOptions,
+    ) {
+      if (listener) {
+        let set = activeListeners.get(type);
+        if (!set) {
+          set = new Set();
+          activeListeners.set(type, set);
+        }
+        set.add(listener);
+      }
+      target.addEventListener(type, listener, options);
+    },
+    removeEventListener(
+      type: string,
+      listener: EventListenerOrEventListenerObject | null,
+      options?: boolean | EventListenerOptions,
+    ) {
+      if (listener) {
+        activeListeners.get(type)?.delete(listener);
+      }
+      target.removeEventListener(type, listener, options);
+    },
     dispatchEvent: target.dispatchEvent.bind(target),
   } as unknown as google.maps.maps3d.Map3DElement;
 
   return {
     flyCalls,
+    activeListeners,
     get center() {
       return state.center;
     },
     set center(val: google.maps.LatLngAltitudeLiteral) {
       state.center = val;
     },
+    get cameraPosition() {
+      return state.cameraPosition;
+    },
+    set cameraPosition(val: { lat: number; lng: number; altitude: number } | null) {
+      state.cameraPosition = val;
+    },
+    get heading() {
+      return state.heading;
+    },
+    set heading(val: number | null) {
+      state.heading = val;
+    },
+    get tilt() {
+      return state.tilt;
+    },
+    set tilt(val: number | null) {
+      state.tilt = val;
+    },
     get range() {
       return state.range;
     },
     set range(val: number) {
       state.range = val;
+    },
+    get onFly() {
+      return state.onFly;
+    },
+    set onFly(fn: ((options: google.maps.maps3d.FlyToAnimationOptions) => void) | undefined) {
+      state.onFly = fn;
     },
     dispatchSteady(isSteady: boolean) {
       const ev = Object.assign(new Event('gmp-steadychange'), { isSteady });
@@ -123,10 +249,7 @@ function distanceMeters(
   a: { lat: number; lng: number },
   b: { lat: number; lng: number },
 ): number {
-  const metersPerDegLat = 111_319.9;
-  const dN = (b.lat - a.lat) * metersPerDegLat;
-  const dE = (b.lng - a.lng) * metersPerDegLat * Math.cos(degToRad((a.lat + b.lat) / 2));
-  return Math.hypot(dE, dN);
+  return horizontalDistanceM(a, b);
 }
 
 const START = { lat: 37.423501, lng: -122.086744, heading: 90 };
@@ -652,7 +775,7 @@ describe('Truck', () => {
       { ...START, heading: 0 },
     );
 
-    expect(model.orientationWrites[0]).toEqual({ heading: 0, tilt: -90, roll: 0 });
+    expect(model.orientationWrites[0]).toEqual({ heading: 0, tilt: 0, roll: 0 });
 
     // Build forward speed, then steer right
     for (let i = 0; i < 60; i++) truck.step(1 / 60);
@@ -660,7 +783,7 @@ describe('Truck', () => {
     for (let i = 0; i < 45; i++) truck.step(1 / 60);
 
     const rightTurnOri = model.orientationWrites[model.orientationWrites.length - 1]!;
-    expect(rightTurnOri.tilt).toBe(-90);
+    expect(rightTurnOri.tilt).toBe(0);
     expect(rightTurnOri.roll).toBeLessThan(0);
     expect(rightTurnOri.roll).toBeGreaterThanOrEqual(-30);
 
@@ -669,5 +792,474 @@ describe('Truck', () => {
     for (let i = 0; i < 180; i++) truck.step(1 / 60);
     const settledOri = model.orientationWrites[model.orientationWrites.length - 1]!;
     expect(settledOri.roll).toBeCloseTo(0, 5);
+  });
+
+  test('preserves camera tracking contract unchanged: tilt=72, range=55, altitude=0, and 100% moving-frame flyCameraTo cadence post-steady', () => {
+    const map = createFakeMap();
+    const model = createFakeModel();
+    const input = createInputState({ gas: true });
+    const truck = new Truck(
+      map.element,
+      model.element,
+      input,
+      createFakePopup(),
+      'RELATIVE_TO_GROUND',
+      START,
+    );
+
+    map.dispatchSteady(true);
+    expect(map.flyCalls).toHaveLength(1);
+    expect(map.flyCalls[0]?.endCamera.tilt).toBe(72);
+    expect(map.flyCalls[0]?.endCamera.range).toBe(55);
+    expect(map.flyCalls[0]?.endCamera.altitudeMode).toBe('RELATIVE_TO_GROUND');
+    expect(map.flyCalls[0]?.endCamera.center?.altitude).toBe(0);
+
+    const movingFrames = 300;
+    const baseFly = map.flyCalls.length;
+    for (let i = 0; i < movingFrames; i++) {
+      // Deliberately do NOT dispatch gmp-centerchange / gmp-animationend to prove zero post-steady throttling
+      truck.step(1 / 60);
+    }
+
+    expect(map.flyCalls.length - baseFly).toBe(movingFrames);
+    for (const call of map.flyCalls.slice(baseFly)) {
+      expect(call.durationMillis).toBe(0);
+      expect(call.endCamera.tilt).toBe(72);
+      expect(call.endCamera.range).toBe(55);
+      expect(call.endCamera.altitudeMode).toBe('RELATIVE_TO_GROUND');
+      expect(call.endCamera.center?.altitude).toBe(0);
+    }
+    for (const pos of model.positionWrites) {
+      expect(pos.altitude).toBe(0);
+    }
+  });
+
+  test('tilts smoothly nose-up uphill, nose-down downhill, and stays nose-up reversing on synthetic terrain', () => {
+    const northStart = { lat: 50.085734, lng: -122.855824, heading: 0 };
+    const slope15 = Math.tan(degToRad(15));
+
+    const wireSyntheticTerrain = (
+      map: FakeMap,
+      groundFn: (pos: { lat: number; lng: number }) => number,
+    ) => {
+      map.onFly = (opts) => {
+        const c = opts.endCamera.center;
+        if (!c) return;
+        const heading = opts.endCamera.heading ?? 0;
+        const tilt = opts.endCamera.tilt ?? 72;
+        const range = opts.endCamera.range ?? 55;
+        map.heading = heading;
+        map.tilt = tilt;
+        map.cameraPosition = makeSyntheticEye(c, groundFn(c), heading, tilt, range);
+      };
+    };
+
+    const northMetersFrom = (pos: { lat: number; lng: number }) =>
+      degToRad(pos.lat - northStart.lat) * 6378137;
+
+    // 1. Uphill climb (+15° going North): tilt converges near -15°
+    const upMap = createFakeMap();
+    const upModel = createFakeModel();
+    const upInput = createInputState({ gas: true });
+    wireSyntheticTerrain(upMap, (p) => 1000 + northMetersFrom(p) * slope15);
+    const upTruck = new Truck(
+      upMap.element,
+      upModel.element,
+      upInput,
+      createFakePopup(),
+      'RELATIVE_TO_GROUND',
+      northStart,
+    );
+    upMap.dispatchSteady(true);
+
+    for (let i = 0; i < 180; i++) upTruck.step(1 / 60);
+    const upOri = upModel.orientationWrites[upModel.orientationWrites.length - 1]!;
+    expect(upOri.tilt).toBeLessThan(-14);
+    expect(upOri.tilt).toBeGreaterThan(-16);
+    expect(upTruck.getPitchDeg()).toBeCloseTo(upOri.tilt ?? 0, 1);
+
+    // 2. Downhill descent (-15° going North): tilt converges near +15°
+    const downMap = createFakeMap();
+    const downModel = createFakeModel();
+    const downInput = createInputState({ gas: true });
+    wireSyntheticTerrain(downMap, (p) => 1000 - northMetersFrom(p) * slope15);
+    const downTruck = new Truck(
+      downMap.element,
+      downModel.element,
+      downInput,
+      createFakePopup(),
+      'RELATIVE_TO_GROUND',
+      northStart,
+    );
+    downMap.dispatchSteady(true);
+
+    for (let i = 0; i < 180; i++) downTruck.step(1 / 60);
+    const downOri = downModel.orientationWrites[downModel.orientationWrites.length - 1]!;
+    expect(downOri.tilt).toBeGreaterThan(14);
+    expect(downOri.tilt).toBeLessThan(16);
+
+    // 3. Reversing down an uphill slope (facing North uphill, backing South): nose stays UP (< 0)
+    const revMap = createFakeMap();
+    const revModel = createFakeModel();
+    const revInput = createInputState({ reverse: true });
+    wireSyntheticTerrain(revMap, (p) => 1000 + northMetersFrom(p) * slope15);
+    const revTruck = new Truck(
+      revMap.element,
+      revModel.element,
+      revInput,
+      createFakePopup(),
+      'RELATIVE_TO_GROUND',
+      northStart,
+    );
+    revMap.dispatchSteady(true);
+
+    for (let i = 0; i < 180; i++) revTruck.step(1 / 60);
+    const revOri = revModel.orientationWrites[revModel.orientationWrites.length - 1]!;
+    expect(revOri.tilt).toBeLessThan(-14);
+    expect(revOri.tilt).toBeGreaterThan(-16);
+  });
+
+  test('post-teleport settling waits for gmp-animationend and avoids fake pitch spike on flat urban terrain', () => {
+    const map = createFakeMap();
+    const model = createFakeModel();
+    const input = createInputState();
+
+    let fakeNow = 10_000;
+    const origNow = performance.now;
+    performance.now = () => fakeNow;
+    try {
+      const truck = new Truck(
+        map.element,
+        model.element,
+        input,
+        createFakePopup(),
+        'RELATIVE_TO_GROUND',
+        START,
+      );
+      map.dispatchSteady(true);
+
+      const sf = { lat: 37.7749, lng: -122.4194, heading: 0 };
+      truck.teleportTo(sf.lat, sf.lng, sf.heading);
+      expect(truck.getPitchDeg()).toBe(0);
+
+      // Even past 1200ms wall-clock, while teleport animation has not yet ended
+      // (gmp-animationend not yet fired), settling camera altitude must not lock pitch.
+      fakeNow += 1300;
+      map.heading = sf.heading;
+      map.tilt = 68;
+      map.cameraPosition = makeSyntheticEye(sf, 32, sf.heading, 68);
+      truck.step(1 / 60);
+      expect(truck.getPitchDeg()).toBe(0);
+
+      // Animation ends; camera locks and tiles refine down from 22 m -> 17 m while stationary
+      map.dispatchAnimationEnd();
+      map.tilt = 72;
+      for (const alt of [22.0, 20.5, 19.0, 17.8, 17.0, 17.0]) {
+        fakeNow += 16.67;
+        map.cameraPosition = makeSyntheticEye(sf, alt, sf.heading, 72);
+        truck.step(1 / 60);
+        expect(truck.getPitchDeg()).toBe(0);
+      }
+
+      // Now drive on flat 17.0 m terrain: pitch must stay < 1° (exact 0°)
+      input.gas = true;
+      map.onFly = (opts) => {
+        const c = opts.endCamera.center;
+        if (!c) return;
+        map.heading = opts.endCamera.heading ?? 0;
+        map.tilt = opts.endCamera.tilt ?? 72;
+        map.cameraPosition = makeSyntheticEye(c, 17.0, map.heading, map.tilt, 55);
+      };
+
+      let maxAbsTilt = 0;
+      for (let i = 0; i < 120; i++) {
+        fakeNow += 16.67;
+        truck.step(1 / 60);
+        const ori = model.orientationWrites[model.orientationWrites.length - 1]!;
+        maxAbsTilt = Math.max(maxAbsTilt, Math.abs(ori.tilt ?? 0));
+      }
+      expect(maxAbsTilt).toBeLessThan(1.0);
+      expect(maxAbsTilt).toBe(0);
+    } finally {
+      performance.now = origNow;
+    }
+  });
+
+  test('enables terrain pitch after teleporting or driving before initial gmp-steadychange ever fires', () => {
+    const whistler = { lat: 50.085734, lng: -122.855824, heading: 0 };
+    const slope15 = Math.tan(degToRad(15));
+    const groundAltAt = (pos: { lat: number; lng: number }) =>
+      2300 + degToRad(pos.lat - whistler.lat) * 6378137 * slope15;
+
+    let fakeNow = 10_000;
+    const origNow = performance.now;
+    performance.now = () => fakeNow;
+    try {
+      // 1. Teleport to a hilly preset without ever firing initial gmp-steadychange
+      const tpMap = createFakeMap();
+      const tpModel = createFakeModel();
+      const tpInput = createInputState();
+      tpMap.onFly = (opts) => {
+        const c = opts.endCamera.center;
+        if (!c) return;
+        const heading = opts.endCamera.heading ?? 0;
+        const tilt = opts.endCamera.tilt ?? 72;
+        const range = opts.endCamera.range ?? 55;
+        tpMap.heading = heading;
+        tpMap.tilt = tilt;
+        tpMap.cameraPosition = makeSyntheticEye(c, groundAltAt(c), heading, tilt, range);
+      };
+
+      const tpTruck = new Truck(
+        tpMap.element,
+        tpModel.element,
+        tpInput,
+        createFakePopup(),
+        'RELATIVE_TO_GROUND',
+        START,
+      );
+
+      // Deliberately do NOT dispatch gmp-steadychange before teleporting (e.g. 8 s loading fallback)
+      tpTruck.teleportTo(whistler.lat, whistler.lng, whistler.heading);
+      expect(tpTruck.getPitchDeg()).toBe(0);
+
+      // During teleport animation, pitch stays locked at 0
+      fakeNow += 600;
+      tpTruck.step(1 / 60);
+      expect(tpTruck.getPitchDeg()).toBe(0);
+
+      // Let teleport finish (animation end after 1200 ms flight), still with zero gmp-steadychange
+      fakeNow += 700;
+      tpMap.dispatchAnimationEnd();
+      tpTruck.step(1 / 60);
+      expect(tpTruck.getPitchDeg()).toBe(0);
+
+      // Drive uphill on the +15° slope and verify smooth nose-up pitch response
+      tpInput.gas = true;
+      let prevPitch = tpTruck.getPitchDeg();
+      let maxPitchStep = 0;
+      for (let i = 0; i < 180; i++) {
+        fakeNow += 1000 / 60;
+        tpTruck.step(1 / 60);
+        tpMap.dispatchCenterChange();
+        const curPitch = tpTruck.getPitchDeg();
+        maxPitchStep = Math.max(maxPitchStep, Math.abs(curPitch - prevPitch));
+        prevPitch = curPitch;
+      }
+
+      const tpOri = tpModel.orientationWrites[tpModel.orientationWrites.length - 1]!;
+      expect(tpTruck.getPitchDeg()).toBeLessThan(-5);
+      expect(tpTruck.getPitchDeg()).toBeLessThan(-14);
+      expect(tpTruck.getPitchDeg()).toBeGreaterThan(-16);
+      expect(tpOri.tilt).toBeCloseTo(tpTruck.getPitchDeg(), 1);
+      expect(maxPitchStep).toBeLessThan(2.0);
+
+      // 2. Drive forward directly without teleporting or ever firing initial gmp-steadychange
+      const driveMap = createFakeMap();
+      const driveModel = createFakeModel();
+      const driveInput = createInputState();
+      driveMap.onFly = (opts) => {
+        const c = opts.endCamera.center;
+        if (!c) return;
+        const heading = opts.endCamera.heading ?? 0;
+        const tilt = opts.endCamera.tilt ?? 72;
+        const range = opts.endCamera.range ?? 55;
+        driveMap.heading = heading;
+        driveMap.tilt = tilt;
+        driveMap.cameraPosition = makeSyntheticEye(c, groundAltAt(c), heading, tilt, range);
+      };
+
+      const driveTruck = new Truck(
+        driveMap.element,
+        driveModel.element,
+        driveInput,
+        createFakePopup(),
+        'RELATIVE_TO_GROUND',
+        whistler,
+      );
+
+      // Stationary before steady: camera untouched and pitch remains 0
+      for (let i = 0; i < 10; i++) {
+        fakeNow += 1000 / 60;
+        driveTruck.step(1 / 60);
+      }
+      expect(driveMap.flyCalls).toHaveLength(0);
+      expect(driveTruck.getPitchDeg()).toBe(0);
+
+      // Driving uphill issues RELATIVE_TO_GROUND flyCameraTo and unlocks terrain pitch
+      driveInput.gas = true;
+      for (let i = 0; i < 180; i++) {
+        fakeNow += 1000 / 60;
+        driveTruck.step(1 / 60);
+        driveMap.dispatchCenterChange();
+      }
+
+      const driveOri = driveModel.orientationWrites[driveModel.orientationWrites.length - 1]!;
+      expect(driveTruck.getPitchDeg()).toBeLessThan(-5);
+      expect(driveTruck.getPitchDeg()).toBeLessThan(-14);
+      expect(driveTruck.getPitchDeg()).toBeGreaterThan(-16);
+      expect(driveOri.tilt).toBeCloseTo(driveTruck.getPitchDeg(), 1);
+    } finally {
+      performance.now = origNow;
+    }
+  });
+
+  test('keeps tilt strictly 0 in fixedAltitude (ABSOLUTE) mode even when cameraPosition climbs steep terrain', () => {
+    const map = createFakeMap();
+    const model = createFakeModel();
+    const input = createInputState({ gas: true });
+    const northStart = { lat: 50.085734, lng: -122.855824, heading: 0 };
+    const slope15 = Math.tan(degToRad(15));
+
+    map.onFly = (opts) => {
+      const c = opts.endCamera.center;
+      if (!c) return;
+      const dN = degToRad(c.lat - northStart.lat) * 6378137;
+      map.heading = opts.endCamera.heading ?? 0;
+      map.tilt = opts.endCamera.tilt ?? 72;
+      map.cameraPosition = makeSyntheticEye(c, 1000 + dN * slope15, map.heading, map.tilt, 55);
+    };
+
+    const truck = new Truck(
+      map.element,
+      model.element,
+      input,
+      createFakePopup(),
+      'ABSOLUTE',
+      northStart,
+    );
+    map.dispatchSteady(true);
+
+    for (let i = 0; i < 180; i++) {
+      truck.step(1 / 60);
+    }
+
+    expect(truck.getPitchDeg()).toBe(0);
+    for (const ori of model.orientationWrites) {
+      expect(ori.tilt).toBe(0);
+    }
+    expect(model.orientationWrites).toHaveLength(1);
+    for (const call of map.flyCalls) {
+      expect(call.endCamera.altitudeMode).toBe('ABSOLUTE');
+    }
+  });
+
+  test('produces frame-rate-independent steering roll across 30/60/144 Hz and survives 0.25s hitches without instability', () => {
+    const runRollProfile = (schedule: number[]) => {
+      const map = createFakeMap();
+      const model = createFakeModel();
+      const input = createInputState({ gas: true });
+      const truck = new Truck(
+        map.element,
+        model.element,
+        input,
+        createFakePopup(),
+        'RELATIVE_TO_GROUND',
+        { ...START, heading: 0 },
+      );
+      map.dispatchSteady(true);
+
+      let elapsed = 0;
+      let peakAbsRoll = 0;
+      let rollAfterTurn = 0;
+      let recordedTurn = false;
+      for (const dt of schedule) {
+        input.right = elapsed >= 1.0 && elapsed < 2.0;
+        truck.step(dt);
+        elapsed += dt;
+        const curRoll = model.orientationWrites[model.orientationWrites.length - 1]?.roll ?? 0;
+        peakAbsRoll = Math.max(peakAbsRoll, Math.abs(curRoll));
+        if (!recordedTurn && elapsed >= 1.99) {
+          rollAfterTurn = curRoll;
+          recordedTurn = true;
+        }
+      }
+      const finalRoll = model.orientationWrites[model.orientationWrites.length - 1]?.roll ?? 0;
+      return { peakAbsRoll, rollAfterTurn, finalRoll };
+    };
+
+    const makeConst = (fps: number, sec: number) =>
+      Array.from({ length: Math.round(fps * sec) }, () => 1 / fps);
+
+    // 4.5s total: 1s straight, 1s turning right, 2.5s straight settle
+    const r30 = runRollProfile(makeConst(30, 4.5));
+    const r60 = runRollProfile(makeConst(60, 4.5));
+    const r144 = runRollProfile(makeConst(144, 4.5));
+
+    // Schedule with repeated 0.25s frame stalls during turning and settling
+    const hitchSchedule: number[] = [];
+    let t = 0;
+    let idx = 0;
+    while (t < 4.5 - 1e-6) {
+      const rawDt = idx % 8 === 3 ? 0.25 : 1 / 60;
+      const dt = Math.min(rawDt, 4.5 - t);
+      hitchSchedule.push(dt);
+      t += dt;
+      idx++;
+    }
+    const rHitch = runRollProfile(hitchSchedule);
+
+    expect(r60.rollAfterTurn).toBeLessThan(-1);
+    expect(Math.abs(r30.rollAfterTurn - r144.rollAfterTurn)).toBeLessThan(0.4);
+    expect(Math.abs(r60.rollAfterTurn - r144.rollAfterTurn)).toBeLessThan(0.25);
+    expect(rHitch.peakAbsRoll).toBeLessThanOrEqual(30);
+    expect(Math.abs(rHitch.rollAfterTurn - r60.rollAfterTurn)).toBeLessThan(1.0);
+    expect(r30.finalRoll).toBe(0);
+    expect(r60.finalRoll).toBe(0);
+    expect(r144.finalRoll).toBe(0);
+    expect(rHitch.finalRoll).toBe(0);
+  });
+
+  test('stop() detaches map event listeners and start() clamps negative rAF timestamps to dt=0', () => {
+    const map = createFakeMap();
+    const model = createFakeModel();
+    const input = createInputState({ gas: true });
+    let readyCalls = 0;
+    const truck = new Truck(
+      map.element,
+      model.element,
+      input,
+      createFakePopup(),
+      'RELATIVE_TO_GROUND',
+      START,
+      () => {
+        readyCalls++;
+      },
+    );
+
+    expect(map.activeListeners.get('gmp-centerchange')?.size).toBe(1);
+    expect(map.activeListeners.get('gmp-animationend')?.size).toBe(1);
+    expect(map.activeListeners.get('gmp-steadychange')?.size).toBe(1);
+
+    // Negative first-frame rAF timestamp must not move the truck backwards
+    const origRAF = globalThis.requestAnimationFrame;
+    const origNow = performance.now;
+    let rafCb: FrameRequestCallback | null = null;
+    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      rafCb = cb;
+      return 42;
+    }) as typeof requestAnimationFrame;
+    performance.now = () => 2_000;
+
+    try {
+      truck.start();
+      const posBefore = model.element.position;
+      rafCb!(1_950); // t < lastTime (-50 ms)
+      expect(model.element.position).toEqual(posBefore);
+
+      truck.stop();
+    } finally {
+      globalThis.requestAnimationFrame = origRAF;
+      performance.now = origNow;
+    }
+
+    expect(map.activeListeners.get('gmp-centerchange')?.size ?? 0).toBe(0);
+    expect(map.activeListeners.get('gmp-animationend')?.size ?? 0).toBe(0);
+    expect(map.activeListeners.get('gmp-steadychange')?.size ?? 0).toBe(0);
+
+    // Dispatching steady after stop() must not trigger onReady or flyCameraTo
+    map.dispatchSteady(true);
+    expect(readyCalls).toBe(0);
+    expect(map.flyCalls).toHaveLength(0);
   });
 });
