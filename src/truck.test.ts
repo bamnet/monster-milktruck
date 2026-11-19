@@ -670,4 +670,75 @@ describe('Truck', () => {
     const settledOri = model.orientationWrites[model.orientationWrites.length - 1]!;
     expect(settledOri.roll).toBeCloseTo(0, 5);
   });
+
+  test('normalizes >=180 compass start headings without stationary churn and reports pose updates on move, stop, and teleport', () => {
+    const map = createFakeMap();
+    const model = createFakeModel();
+    const input = createInputState();
+    const poseEvents: Array<{ lat: number; lng: number; heading: number; immediate: boolean }> = [];
+
+    // Start at Whistler-style compass heading 220 (>= 180)
+    const whistlerStart = { lat: 50.085734, lng: -122.855824, heading: 220 };
+    const truck = new Truck(
+      map.element,
+      model.element,
+      input,
+      createFakePopup(),
+      'RELATIVE_TO_GROUND',
+      whistlerStart,
+      undefined,
+      (pose, immediate) => {
+        poseEvents.push({ ...pose, immediate });
+      },
+    );
+
+    // 30 stationary frames with compass start heading 220 must not emit flyCameraTo or pose updates
+    for (let i = 0; i < 30; i++) {
+      truck.step(1 / 60);
+    }
+    expect(map.flyCalls).toHaveLength(0);
+    expect(poseEvents).toHaveLength(0);
+    expect(truck.getPose()).toEqual({
+      lat: whistlerStart.lat,
+      lng: whistlerStart.lng,
+      heading: -140,
+    });
+
+    // Accelerate briefly: moving frames emit immediate=false
+    input.gas = true;
+    for (let i = 0; i < 10; i++) {
+      truck.step(1 / 60);
+      map.dispatchCenterChange();
+    }
+    expect(poseEvents.length).toBeGreaterThan(0);
+    expect(poseEvents.every((e) => e.immediate === false)).toBe(true);
+
+    // Release gas and coast to rest: exactly one immediate=true event fires on stop, then silence
+    input.gas = false;
+    for (let i = 0; i < 240; i++) {
+      truck.step(1 / 60);
+      map.dispatchCenterChange();
+    }
+    const immediateStops = poseEvents.filter((e) => e.immediate);
+    expect(immediateStops).toHaveLength(1);
+    const countAfterStop = poseEvents.length;
+
+    for (let i = 0; i < 30; i++) {
+      truck.step(1 / 60);
+    }
+    expect(poseEvents).toHaveLength(countAfterStop);
+
+    // Teleport emits immediate=true once and does not emit a duplicate stop event on next step
+    truck.teleportTo(35.668607, 139.822026, 180);
+    expect(poseEvents).toHaveLength(countAfterStop + 1);
+    expect(poseEvents[poseEvents.length - 1]).toEqual({
+      lat: 35.668607,
+      lng: 139.822026,
+      heading: -180,
+      immediate: true,
+    });
+
+    truck.step(1 / 60);
+    expect(poseEvents).toHaveLength(countAfterStop + 1);
+  });
 });
