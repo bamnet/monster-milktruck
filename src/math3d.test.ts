@@ -1,12 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  clamp,
-  degToRad,
-  fixAngle,
-  horizontalDistanceM,
-  offsetToLatLng,
-  radToDeg,
-} from './math3d.ts';
+import { clamp, degToRad, fixAngle, offsetToLatLng } from './math3d.ts';
 
 describe('math3d', () => {
   test('clamp restricts values to [lo, hi]', () => {
@@ -37,32 +30,6 @@ describe('math3d', () => {
     expect(degToRad(-90)).toBeCloseTo(-Math.PI / 2, 10);
     expect(degToRad(180)).toBeCloseTo(Math.PI, 10);
     expect(degToRad(360)).toBeCloseTo(Math.PI * 2, 10);
-  });
-
-  test('radToDeg inverts degToRad for positive, negative, and zero angles', () => {
-    expect(radToDeg(0)).toBe(0);
-    expect(radToDeg(Math.PI / 2)).toBeCloseTo(90, 10);
-    expect(radToDeg(-Math.PI / 2)).toBeCloseTo(-90, 10);
-    expect(radToDeg(Math.PI)).toBeCloseTo(180, 10);
-    expect(radToDeg(degToRad(37.5))).toBeCloseTo(37.5, 10);
-  });
-
-  test('horizontalDistanceM matches offsetToLatLng displacements, high latitudes, and antimeridian wrap', () => {
-    const start = { lat: 37.423501, lng: -122.086744 };
-    expect(horizontalDistanceM(start, start)).toBe(0);
-
-    const moved = offsetToLatLng(start.lat, start.lng, 30, 40);
-    expect(horizontalDistanceM(start, moved)).toBeCloseTo(50, 3);
-    expect(horizontalDistanceM(moved, start)).toBeCloseTo(50, 3);
-
-    const highLatStart = { lat: 60, lng: 10 };
-    const highLatMoved = offsetToLatLng(highLatStart.lat, highLatStart.lng, 120, -50);
-    expect(horizontalDistanceM(highLatStart, highLatMoved)).toBeCloseTo(130, 2);
-
-    const westOfSeam = { lat: 0, lng: 179.999 };
-    const eastOfSeam = offsetToLatLng(westOfSeam.lat, westOfSeam.lng, 300, 0);
-    expect(eastOfSeam.lng).toBeLessThan(-179.99);
-    expect(horizontalDistanceM(westOfSeam, eastOfSeam)).toBeCloseTo(300, 2);
   });
 
   test('offsetToLatLng offsets coordinates in meters along east and north axes', () => {

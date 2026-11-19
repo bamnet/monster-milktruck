@@ -1,75 +1,15 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Page } from '@playwright/test';
 import { buildAndServeApp, launchPlaywrightBrowser, loadEnvIfNeeded } from '../e2e/helpers.ts';
 import { PRESETS } from '../src/config.ts';
-import type { LatLngAlt, Orientation3D, TerrainTrace, TraceFrame } from '../src/trace-types.ts';
+import type { TerrainTrace, TraceFrame } from '../src/trace-types.ts';
 
 loadEnvIfNeeded();
 
-const DEFAULT_PRESETS = ['Whistler', 'San Francisco'] as const;
-const DEFAULT_CAM_RANGE_M = 55;
-const DEFAULT_CAM_TILT_DEG = 72;
+const TARGET_PRESETS = ['Whistler', 'San Francisco'] as const;
 
 function slugify(label: string): string {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-}
-
-function parseCliFlag(name: string): string | undefined {
-  const prefix = `--${name}=`;
-  const match = process.argv.find((arg) => arg.startsWith(prefix));
-  return match ? match.slice(prefix.length) : undefined;
-}
-
-async function waitForMapReady(page: Page, expectedPresets: number): Promise<void> {
-  await page.waitForFunction(
-    (count: number) => {
-      if (!customElements.get('gmp-map-3d') || !customElements.get('gmp-model-3d')) {
-        return false;
-      }
-      const map = document.querySelector('gmp-map-3d') as
-        | (google.maps.maps3d.Map3DElement & { flyCameraTo?: unknown })
-        | null;
-      const model = document.querySelector('gmp-model-3d') as
-        | google.maps.maps3d.Model3DElement
-        | null;
-      if (!map || !model || typeof map.flyCameraTo !== 'function') return false;
-      const pos = model.position as google.maps.LatLngAltitude | null;
-      return (
-        Boolean(pos && Number.isFinite(pos.lat) && Number.isFinite(pos.lng)) &&
-        document.querySelectorAll('#presets button').length === count
-      );
-    },
-    expectedPresets,
-    { timeout: 30_000 },
-  );
-
-  // Wait for the initial gmp-steadychange event so the 3D scene has settled.
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) => {
-        const map = document.querySelector('gmp-map-3d') as
-          | (google.maps.maps3d.Map3DElement & { isSteady?: boolean })
-          | null;
-        const loading = document.getElementById('loading-screen');
-        if (!map || map.isSteady === true || loading?.hidden === true) {
-          resolve();
-          return;
-        }
-        const timer = window.setTimeout(() => {
-          map.removeEventListener('gmp-steadychange', onSteady);
-          resolve();
-        }, 15_000);
-        const onSteady = (e: Event) => {
-          if ((e as Event & { isSteady?: boolean }).isSteady) {
-            window.clearTimeout(timer);
-            map.removeEventListener('gmp-steadychange', onSteady);
-            resolve();
-          }
-        };
-        map.addEventListener('gmp-steadychange', onSteady);
-      }),
-  );
 }
 
 // Records public Map3DElement (gmp-map-3d) and Model3DElement (gmp-model-3d) properties
@@ -82,14 +22,7 @@ async function main(): Promise<void> {
   }
 
   const headless = !process.argv.includes('--headed');
-  const presetsArg = parseCliFlag('presets');
-  const targetPresets = presetsArg
-    ? presetsArg
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : [...DEFAULT_PRESETS];
-  const outDir = parseCliFlag('out-dir') ?? join(process.cwd(), 'testdata', 'traces');
+  const outDir = join(process.cwd(), 'testdata', 'traces');
   mkdirSync(outDir, { recursive: true });
 
   const app = await buildAndServeApp(apiKey);
@@ -98,149 +31,50 @@ async function main(): Promise<void> {
 
   try {
     await page.goto(app.url);
-    await waitForMapReady(page, PRESETS.length);
-
-    // Track target range & altitude offset from flyCameraTo so groundAltitude is exact.
-    await page.evaluate(
-      ({ defaultRange, defaultTilt }) => {
-        const map = document.querySelector('gmp-map-3d') as google.maps.maps3d.Map3DElement;
-        const win = window as unknown as {
-          __traceMeta: {
-            targetRange: number;
-            targetTilt: number;
-            targetAltOffset: number;
-            steadySeen: boolean;
-            animEnded: boolean;
-          };
-        };
-        win.__traceMeta = {
-          targetRange: defaultRange,
-          targetTilt: defaultTilt,
-          targetAltOffset: 0,
-          steadySeen: false,
-          animEnded: false,
-        };
-        map.addEventListener('gmp-steadychange', (e: Event) => {
-          if ((e as Event & { isSteady?: boolean }).isSteady) {
-            win.__traceMeta.steadySeen = true;
-          }
-        });
-        map.addEventListener('gmp-animationend', () => {
-          win.__traceMeta.animEnded = true;
-        });
-
-        const origFly = map.flyCameraTo.bind(map);
-        map.flyCameraTo = (opts: google.maps.maps3d.FlyToAnimationOptions) => {
-          if (Number.isFinite(opts.endCamera.range)) {
-            win.__traceMeta.targetRange = opts.endCamera.range!;
-          }
-          if (Number.isFinite(opts.endCamera.tilt)) {
-            win.__traceMeta.targetTilt = opts.endCamera.tilt!;
-          }
-          const c = opts.endCamera.center as google.maps.LatLngAltitudeLiteral | undefined;
-          if (c && Number.isFinite(c.altitude)) {
-            win.__traceMeta.targetAltOffset = c.altitude!;
-          }
-          return origFly(opts);
-        };
-      },
-      { defaultRange: DEFAULT_CAM_RANGE_M, defaultTilt: DEFAULT_CAM_TILT_DEG },
+    await page.waitForFunction(
+      (expectedPresets: number) =>
+        Boolean(
+          document.querySelector('gmp-map-3d') &&
+            document.querySelector('gmp-model-3d') &&
+            document.querySelectorAll('#presets button').length === expectedPresets,
+        ),
+      PRESETS.length,
+      { timeout: 20_000 },
     );
 
-    for (const label of targetPresets) {
+    for (const label of TARGET_PRESETS) {
       const preset = PRESETS.find((p) => p.label === label);
       if (!preset) throw new Error(`Preset not found: ${label}`);
 
       console.log(`Recording trace for ${label}...`);
-      await page.evaluate(() => {
-        const win = window as unknown as {
-          __traceMeta: { steadySeen: boolean; animEnded: boolean; teleportStartMs: number };
-        };
-        win.__traceMeta.steadySeen = false;
-        win.__traceMeta.animEnded = false;
-        win.__traceMeta.teleportStartMs = performance.now();
-      });
       await page.locator('#presets button', { hasText: label }).click();
 
       await page.waitForFunction(
         (target: { lat: number; lng: number }) => {
-          const map = document.querySelector('gmp-map-3d') as google.maps.maps3d.Map3DElement & {
-            cameraPosition?: google.maps.LatLngAltitude | null;
-          };
-          const model = document.querySelector('gmp-model-3d') as google.maps.maps3d.Model3DElement;
-          const pos = model.position as google.maps.LatLngAltitude | null;
-          const cp = map.cameraPosition;
-          const win = window as unknown as {
-            __traceMeta: { steadySeen: boolean; animEnded: boolean; teleportStartMs: number };
-          };
-          const nearModel = Boolean(
-            pos && Math.abs(pos.lat - target.lat) < 0.002 && Math.abs(pos.lng - target.lng) < 0.002,
+          const c = (document.querySelector('gmp-map-3d') as google.maps.maps3d.Map3DElement)
+            .center as google.maps.LatLngAltitude;
+          return (
+            Math.abs(c.lat - target.lat) < 0.002 &&
+            Math.abs(c.lng - target.lng) < 0.002 &&
+            Math.abs(c.altitude ?? 0) > 1
           );
-          const validCam = Boolean(
-            cp &&
-              Number.isFinite(cp.lat) &&
-              Number.isFinite(cp.lng) &&
-              Number.isFinite(cp.altitude) &&
-              Math.abs(cp.lat - target.lat) < 0.01 &&
-              Math.abs(cp.lng - target.lng) < 0.01 &&
-              Math.abs(cp.altitude) >= 0.01,
-          );
-          const flightComplete =
-            win.__traceMeta.steadySeen ||
-            win.__traceMeta.animEnded ||
-            performance.now() - win.__traceMeta.teleportStartMs >= 1_500;
-          return nearModel && validCam && flightComplete;
         },
         { lat: preset.lat, lng: preset.lng },
-        { timeout: 18_000 },
-      );
-
-      // Wait briefly for gmp-steadychange after teleport arrival (bounded for software WebGL).
-      await page.evaluate(
-        () =>
-          new Promise<void>((resolve) => {
-            const map = document.querySelector('gmp-map-3d') as
-              | (google.maps.maps3d.Map3DElement & { isSteady?: boolean })
-              | null;
-            const win = window as unknown as { __traceMeta: { steadySeen: boolean } };
-            if (!map || map.isSteady === true || win.__traceMeta.steadySeen) {
-              resolve();
-              return;
-            }
-            const timer = window.setTimeout(() => {
-              map.removeEventListener('gmp-steadychange', onSteady);
-              resolve();
-            }, 3_000);
-            const onSteady = (e: Event) => {
-              if ((e as Event & { isSteady?: boolean }).isSteady) {
-                window.clearTimeout(timer);
-                map.removeEventListener('gmp-steadychange', onSteady);
-                resolve();
-              }
-            };
-            map.addEventListener('gmp-steadychange', onSteady);
-          }),
+        { timeout: 15_000 },
       );
       await page.waitForTimeout(500);
 
       await page.evaluate(() => {
-        const map = document.querySelector('gmp-map-3d') as google.maps.maps3d.Map3DElement & {
-          cameraPosition?: google.maps.LatLngAltitude | null;
-        };
+        const map = document.querySelector('gmp-map-3d') as google.maps.maps3d.Map3DElement;
         const model = document.querySelector('gmp-model-3d') as google.maps.maps3d.Model3DElement;
         const win = window as unknown as {
           __traceFrames: TraceFrame[];
           __traceInput: { left: boolean; right: boolean; gas: boolean; reverse: boolean };
           __traceActive: boolean;
-          __traceMeta: { targetRange: number; targetTilt: number; targetAltOffset: number };
         };
         win.__traceFrames = [];
         win.__traceInput = { left: false, right: false, gas: false, reverse: false };
         win.__traceActive = true;
-
-        const round7 = (v: number) => Math.round(v * 1e7) / 1e7;
-        const round2 = (v: number) => Math.round(v * 100) / 100;
-
         let lastT = performance.now();
         const t0 = lastT;
         const sample = (now: number) => {
@@ -248,67 +82,24 @@ async function main(): Promise<void> {
           const dt = Math.min((now - lastT) / 1000, 0.25);
           lastT = now;
           if (dt > 0) {
-            // Explicitly read prototype getters into plain JSON-serializable literals.
             const pos = model.position as google.maps.LatLngAltitude;
-            const ori = model.orientation as google.maps.Orientation3D | null;
             const center = map.center as google.maps.LatLngAltitude;
-            const cp = map.cameraPosition;
-
-            const mapTilt = Number.isFinite(map.tilt)
-              ? round2(map.tilt as number)
-              : round2(win.__traceMeta.targetTilt);
-
-            const cameraPosition: LatLngAlt | undefined =
-              cp &&
-              Number.isFinite(cp.lat) &&
-              Number.isFinite(cp.lng) &&
-              Number.isFinite(cp.altitude)
-                ? { lat: round7(cp.lat), lng: round7(cp.lng), altitude: round2(cp.altitude) }
-                : undefined;
-
-            const modelOrientation: Orientation3D | undefined =
-              ori &&
-              Number.isFinite(ori.heading) &&
-              Number.isFinite(ori.tilt) &&
-              Number.isFinite(ori.roll)
-                ? {
-                    heading: round2(ori.heading),
-                    tilt: round2(ori.tilt),
-                    roll: round2(ori.roll),
-                  }
-                : undefined;
-
-            const groundAltitude =
-              cameraPosition && Math.abs(cameraPosition.altitude) >= 0.01
-                ? round2(
-                    cameraPosition.altitude -
-                      win.__traceMeta.targetRange * Math.cos((mapTilt * Math.PI) / 180) -
-                      win.__traceMeta.targetAltOffset,
-                  )
-                : undefined;
-
-            const frame: TraceFrame = {
+            win.__traceFrames.push({
               tMs: Math.round((now - t0) * 10) / 10,
               dt: Math.round(dt * 1e5) / 1e5,
               input: { ...win.__traceInput },
               modelPos: {
-                lat: round7(pos.lat),
-                lng: round7(pos.lng),
-                altitude: round2(pos.altitude ?? 0),
+                lat: Math.round(pos.lat * 1e7) / 1e7,
+                lng: Math.round(pos.lng * 1e7) / 1e7,
               },
               mapCenter: {
-                lat: round7(center.lat),
-                lng: round7(center.lng),
-                altitude: round2(center.altitude ?? 0),
+                lat: Math.round(center.lat * 1e7) / 1e7,
+                lng: Math.round(center.lng * 1e7) / 1e7,
+                altitude: Math.round((center.altitude ?? 0) * 100) / 100,
               },
-              mapRange: round2(map.range ?? win.__traceMeta.targetRange),
-              mapHeading: round2(map.heading ?? 0),
-              mapTilt,
-              ...(cameraPosition ? { cameraPosition } : {}),
-              ...(modelOrientation ? { modelOrientation } : {}),
-              ...(groundAltitude !== undefined ? { groundAltitude } : {}),
-            };
-            win.__traceFrames.push(frame);
+              mapRange: Math.round((map.range ?? 55) * 100) / 100,
+              mapHeading: Math.round((map.heading ?? 0) * 100) / 100,
+            });
           }
           requestAnimationFrame(sample);
         };
