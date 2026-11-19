@@ -53,7 +53,7 @@ The included workflow at `.github/workflows/deploy.yml` builds and deploys on ev
 | Left     | Left arrow / A    |
 | Right    | Right arrow / D   |
 
-Click a preset city button to teleport.
+Click a preset city button to teleport. The URL hash (`#lat=...&lng=...&heading=...&mode=...`) stays in sync with your current location, heading, and map type so you can bookmark or share any spot.
 
 ## What's different from the original
 

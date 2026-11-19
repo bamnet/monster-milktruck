@@ -78,6 +78,8 @@ export class Truck {
   private lastCameraKey = '';
   private cameraFlyInFlightUntil = 0;
   private initialSceneReady = false;
+  private pendingPreSteadySnap = false;
+  private wasMoving = false;
 
   constructor(
     private readonly map: Map3D,
@@ -87,11 +89,12 @@ export class Truck {
     private readonly altitudeMode: google.maps.maps3d.AltitudeModeString,
     start: TruckStart,
     private readonly onReady?: () => void,
+    private readonly onPoseUpdate?: (pose: TruckStart, immediate: boolean) => void,
   ) {
     this.lat = start.lat;
     this.lng = start.lng;
-    this.heading = start.heading;
-    this.camHeading = start.heading;
+    this.heading = fixAngle(start.heading);
+    this.camHeading = this.heading;
     this.applyModel();
 
     const clearInFlight = () => {
@@ -107,6 +110,7 @@ export class Truck {
     const onInitialSteady = (e: Event) => {
       if (!(e as Event & { isSteady?: boolean }).isSteady) return;
       this.initialSceneReady = true;
+      this.pendingPreSteadySnap = false;
       this.cameraFlyInFlightUntil = 0;
       this.map.removeEventListener('gmp-steadychange', onInitialSteady);
       if (this.lastCameraKey === initialCameraKey && performance.now() >= this.teleportUntil) {
@@ -117,13 +121,22 @@ export class Truck {
     this.map.addEventListener('gmp-steadychange', onInitialSteady);
   }
 
+  getPose(): TruckStart {
+    return {
+      lat: this.lat,
+      lng: this.lng,
+      heading: this.heading,
+    };
+  }
+
   teleportTo(lat: number, lng: number, heading = 0): void {
     this.lat = lat;
     this.lng = lng;
-    this.heading = heading;
-    this.camHeading = heading;
+    this.heading = fixAngle(heading);
+    this.camHeading = this.heading;
     this.velE = 0;
     this.velN = 0;
+    this.wasMoving = false;
     this.roll = 0;
     this.rollSpeed = 0;
     this.idleTimer = 0;
@@ -131,6 +144,8 @@ export class Truck {
     this.applyModel();
     this.flyCameraToSelf(TELEPORT_FLY_MS);
     this.teleportUntil = performance.now() + TELEPORT_FLY_MS;
+    this.pendingPreSteadySnap = !this.initialSceneReady;
+    this.onPoseUpdate?.({ lat: this.lat, lng: this.lng, heading: this.heading }, true);
   }
 
   start(): void {
@@ -234,6 +249,14 @@ export class Truck {
 
     this.applyModel();
     this.followCamera(dt);
+    const isMoving = this.velE !== 0 || this.velN !== 0;
+    if (isMoving) {
+      this.wasMoving = true;
+      this.onPoseUpdate?.({ lat: this.lat, lng: this.lng, heading: this.heading }, false);
+    } else if (this.wasMoving) {
+      this.wasMoving = false;
+      this.onPoseUpdate?.({ lat: this.lat, lng: this.lng, heading: this.heading }, true);
+    }
     this.tickPopups(dt, Math.hypot(this.velE, this.velN));
   }
 
@@ -268,7 +291,9 @@ export class Truck {
       const c0 = Math.exp(-dt / CAM_SMOOTH_TAU);
       this.camHeading = fixAngle(this.camHeading + (1 - c0) * delta);
     }
-    this.flyCameraToSelf(0);
+    const force = this.pendingPreSteadySnap;
+    this.pendingPreSteadySnap = false;
+    this.flyCameraToSelf(0, force);
   }
 
   private cameraKey(): string {
