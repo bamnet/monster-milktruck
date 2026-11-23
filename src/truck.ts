@@ -78,7 +78,7 @@ export class Truck {
   private lastCameraKey = '';
   private cameraFlyInFlightUntil = 0;
   private initialSceneReady = false;
-  private pendingPreSteadySnap = false;
+  private pendingCameraSnap = false;
   private wasMoving = false;
 
   constructor(
@@ -86,7 +86,6 @@ export class Truck {
     private readonly model: Model3D,
     private readonly input: InputState,
     private readonly popupEl: HTMLElement,
-    private readonly altitudeMode: google.maps.maps3d.AltitudeModeString,
     start: TruckStart,
     private readonly onReady?: () => void,
     private readonly onPoseUpdate?: (pose: TruckStart, immediate: boolean) => void,
@@ -110,11 +109,14 @@ export class Truck {
     const onInitialSteady = (e: Event) => {
       if (!(e as Event & { isSteady?: boolean }).isSteady) return;
       this.initialSceneReady = true;
-      this.pendingPreSteadySnap = false;
       this.cameraFlyInFlightUntil = 0;
       this.map.removeEventListener('gmp-steadychange', onInitialSteady);
-      if (this.lastCameraKey === initialCameraKey && performance.now() >= this.teleportUntil) {
-        this.flyCameraToSelf(0, true);
+      if (performance.now() >= this.teleportUntil) {
+        const shouldSnap = this.lastCameraKey === initialCameraKey || this.pendingCameraSnap;
+        this.pendingCameraSnap = false;
+        if (shouldSnap) {
+          this.flyCameraToSelf(0, true);
+        }
       }
       this.onReady?.();
     };
@@ -127,6 +129,15 @@ export class Truck {
       lng: this.lng,
       heading: this.heading,
     };
+  }
+
+  snapCamera(): void {
+    if (performance.now() < this.teleportUntil) {
+      this.pendingCameraSnap = true;
+      return;
+    }
+    this.pendingCameraSnap = false;
+    this.flyCameraToSelf(0, true);
   }
 
   teleportTo(lat: number, lng: number, heading = 0): void {
@@ -144,7 +155,7 @@ export class Truck {
     this.applyModel();
     this.flyCameraToSelf(TELEPORT_FLY_MS);
     this.teleportUntil = performance.now() + TELEPORT_FLY_MS;
-    this.pendingPreSteadySnap = !this.initialSceneReady;
+    this.pendingCameraSnap = !this.initialSceneReady;
     this.onPoseUpdate?.({ lat: this.lat, lng: this.lng, heading: this.heading }, true);
   }
 
@@ -291,13 +302,13 @@ export class Truck {
       const c0 = Math.exp(-dt / CAM_SMOOTH_TAU);
       this.camHeading = fixAngle(this.camHeading + (1 - c0) * delta);
     }
-    const force = this.pendingPreSteadySnap;
-    this.pendingPreSteadySnap = false;
+    const force = this.pendingCameraSnap;
+    this.pendingCameraSnap = false;
     this.flyCameraToSelf(0, force);
   }
 
   private cameraKey(): string {
-    return `${roundCoord(this.lat)},${roundCoord(this.lng)},${roundAngle(this.camHeading)},${this.altitudeMode}`;
+    return `${roundCoord(this.lat)},${roundCoord(this.lng)},${roundAngle(this.camHeading)}`;
   }
 
   private flyCameraToSelf(durationMillis: number, force = false): void {
@@ -314,7 +325,7 @@ export class Truck {
     this.map.flyCameraTo({
       endCamera: {
         center: { lat: roundCoord(this.lat), lng: roundCoord(this.lng), altitude: 0 },
-        altitudeMode: this.altitudeMode,
+        altitudeMode: 'RELATIVE_TO_GROUND',
         heading: roundAngle(this.camHeading),
         tilt: CAM_TILT_DEG,
         range: CAM_RANGE_M,

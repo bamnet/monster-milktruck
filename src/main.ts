@@ -1,4 +1,4 @@
-import { PRESETS, resolveAltitudeMode } from './config.ts';
+import { PRESETS } from './config.ts';
 import { createInput } from './input.ts';
 import { createLoadingScreen } from './loading.ts';
 import { fixAngle } from './math3d.ts';
@@ -85,11 +85,6 @@ async function main(): Promise<void> {
   const mapModeSelect = document.getElementById('map-mode') as HTMLSelectElement | null;
   if (mapModeSelect) {
     mapModeSelect.value = initState.mode;
-    mapModeSelect.addEventListener('change', () => {
-      const nextMode: AppMapMode = mapModeSelect.value === 'ROADMAP' ? 'ROADMAP' : 'SATELLITE';
-      map.mode = toSdkMapMode(nextMode);
-      urlSync.setMode(nextMode);
-    });
   }
 
   const model = new Model3DElement({
@@ -101,8 +96,6 @@ async function main(): Promise<void> {
   });
   map.append(model);
 
-  const altitudeMode = resolveAltitudeMode(window.location.search);
-
   const input = createInput();
   const popupEl = document.getElementById('popup')!;
   const truck = new Truck(
@@ -110,7 +103,6 @@ async function main(): Promise<void> {
     model,
     input,
     popupEl,
-    altitudeMode,
     { lat: initState.lat, lng: initState.lng, heading: initHeading },
     () => {
       loadingScreen.complete();
@@ -119,6 +111,16 @@ async function main(): Promise<void> {
       urlSync.updatePose(pose, immediate);
     },
   );
+
+  if (mapModeSelect) {
+    mapModeSelect.addEventListener('change', () => {
+      const nextMode: AppMapMode = mapModeSelect.value === 'ROADMAP' ? 'ROADMAP' : 'SATELLITE';
+      if (nextMode === urlSync.getState().mode) return;
+      map.mode = toSdkMapMode(nextMode);
+      urlSync.setMode(nextMode);
+      truck.snapCamera();
+    });
+  }
 
   urlSync.flush();
 
@@ -132,6 +134,9 @@ async function main(): Promise<void> {
       map.mode = toSdkMapMode(next.mode);
       if (mapModeSelect) {
         mapModeSelect.value = next.mode;
+      }
+      if (!poseChanged) {
+        truck.snapCamera();
       }
     }
     if (poseChanged) {

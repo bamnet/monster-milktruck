@@ -65,7 +65,7 @@ test.describe('Monster Milktruck browser smoke tests', () => {
     }
   });
 
-  test('upgrades gmp-map-3d and gmp-model-3d, toggles map mode, and honors ?fixedAltitude', async ({
+  test('upgrades gmp-map-3d and gmp-model-3d, toggles map mode, and re-snaps camera on mode switch', async ({
     page,
   }) => {
     const errors = attachErrorTracking(page);
@@ -91,16 +91,6 @@ test.describe('Monster Milktruck browser smoke tests', () => {
     expect(initState.mode).toBe('SATELLITE');
     expect(horizontalDistanceMeters(initState.modelPos, PRESETS[0]!)).toBeLessThan(1);
 
-    await page.locator('#map-mode').selectOption('ROADMAP');
-    const switchedMode = await page.evaluate(() =>
-      String((document.querySelector('gmp-map-3d') as google.maps.maps3d.Map3DElement).mode),
-    );
-    expect(switchedMode).toBe('ROADMAP');
-    expect(errors).toEqual([]);
-
-    // Verify ?fixedAltitude configures AltitudeMode.ABSOLUTE on flyCameraTo
-    await page.goto(`${app!.url}/?fixedAltitude=1`);
-    await waitForMapAndModelReady(page);
     await page.evaluate(() => {
       const map = document.querySelector('gmp-map-3d') as google.maps.maps3d.Map3DElement;
       (window as unknown as { __lastFlyMode: string | null }).__lastFlyMode = null;
@@ -112,16 +102,14 @@ test.describe('Monster Milktruck browser smoke tests', () => {
       };
     });
 
-    await page.keyboard.down('ArrowUp');
-    await page.waitForFunction(
-      () => (window as unknown as { __lastFlyMode: string | null }).__lastFlyMode !== null,
-    );
-    await page.keyboard.up('ArrowUp');
-
-    const flyMode = await page.evaluate(
-      () => (window as unknown as { __lastFlyMode: string | null }).__lastFlyMode,
-    );
-    expect(flyMode).toBe('ABSOLUTE');
+    await page.locator('#map-mode').selectOption('ROADMAP');
+    const switchedState = await page.evaluate(() => ({
+      mode: String((document.querySelector('gmp-map-3d') as google.maps.maps3d.Map3DElement).mode),
+      flyMode: (window as unknown as { __lastFlyMode: string | null }).__lastFlyMode,
+    }));
+    expect(switchedState.mode).toBe('ROADMAP');
+    expect(switchedState.flyMode).toBe('RELATIVE_TO_GROUND');
+    expect(errors).toEqual([]);
   });
 
   test('produces zero idle camera churn and prevents arrow keys from panning a focused map', async ({
@@ -275,9 +263,9 @@ test.describe('Monster Milktruck browser smoke tests', () => {
     const whistler = PRESETS.find((p) => p.label === 'Whistler')!;
     const tokyo = PRESETS.find((p) => p.label === 'Tokyo')!;
 
-    // 1. Load directly from a deep-linked URL hash (while preserving ?fixedAltitude=1)
+    // 1. Load directly from a deep-linked URL hash in roadmap mode (while preserving query params)
     await page.goto(
-      `${app!.url}/?fixedAltitude=1#lat=${sf.lat.toFixed(6)}&lng=${sf.lng.toFixed(6)}&heading=220&mode=roadmap`,
+      `${app!.url}/?utm_source=share#lat=${sf.lat.toFixed(6)}&lng=${sf.lng.toFixed(6)}&heading=220&mode=roadmap`,
     );
     await waitForMapAndModelReady(page);
 
@@ -299,7 +287,7 @@ test.describe('Monster Milktruck browser smoke tests', () => {
 
     expect(bootState.mapMode).toBe('ROADMAP');
     expect(bootState.selectValue).toBe('ROADMAP');
-    expect(bootState.search).toBe('?fixedAltitude=1');
+    expect(bootState.search).toBe('?utm_source=share');
     expect(bootState.hash).toBe('#lat=37.774900&lng=-122.419400&heading=220&mode=roadmap');
     expect(horizontalDistanceMeters(bootState.modelPos, sf)).toBeLessThan(1);
     expect(horizontalDistanceMeters(bootState.mapCenter, sf)).toBeLessThan(25);
@@ -315,7 +303,7 @@ test.describe('Monster Milktruck browser smoke tests', () => {
     expect(await page.evaluate(() => window.location.hash)).toBe(
       `#lat=${whistler.lat.toFixed(6)}&lng=${whistler.lng.toFixed(6)}&heading=${whistler.heading}&mode=satellite`,
     );
-    expect(await page.evaluate(() => window.location.search)).toBe('?fixedAltitude=1');
+    expect(await page.evaluate(() => window.location.search)).toBe('?utm_source=share');
 
     // 3. Editing window.location.hash in-place teleports and updates map mode without reload
     await page.evaluate(
