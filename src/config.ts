@@ -12,11 +12,3 @@ export const PRESETS: readonly Preset[] = [
   { label: 'Tokyo', lat: 35.668607, lng: 139.822026, heading: 180 },
   { label: 'Everest', lat: 27.991283, lng: 86.92434, heading: 70 },
 ];
-
-export function resolveAltitudeMode(
-  search: string,
-): google.maps.maps3d.AltitudeModeString {
-  return new URLSearchParams(search).has('fixedAltitude')
-    ? 'ABSOLUTE'
-    : 'RELATIVE_TO_GROUND';
-}

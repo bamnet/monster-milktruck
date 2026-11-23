@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { PRESETS, resolveAltitudeMode } from './config.ts';
+import { PRESETS } from './config.ts';
 
 describe('config', () => {
   test('PRESETS has non-empty unique labels and valid geographic coordinates', () => {
@@ -23,13 +23,5 @@ describe('config', () => {
       expect(preset.heading).toBeGreaterThanOrEqual(0);
       expect(preset.heading).toBeLessThan(360);
     }
-  });
-
-  test('resolveAltitudeMode defaults to RELATIVE_TO_GROUND and switches to ABSOLUTE with fixedAltitude', () => {
-    expect(resolveAltitudeMode('')).toBe('RELATIVE_TO_GROUND');
-    expect(resolveAltitudeMode('?foo=bar')).toBe('RELATIVE_TO_GROUND');
-    expect(resolveAltitudeMode('?fixedAltitude')).toBe('ABSOLUTE');
-    expect(resolveAltitudeMode('?fixedAltitude=1')).toBe('ABSOLUTE');
-    expect(resolveAltitudeMode('?debug=1&fixedAltitude=true')).toBe('ABSOLUTE');
   });
 });

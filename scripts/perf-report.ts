@@ -104,7 +104,7 @@ function createBenchRig(start: { lat: number; lng: number; heading: number }) {
 
   const input: InputState = { left: false, right: false, gas: false, reverse: false };
   const popup = { textContent: '', hidden: true } as unknown as HTMLElement;
-  const truck = new Truck(map, model, input, popup, 'RELATIVE_TO_GROUND', start);
+  const truck = new Truck(map, model, input, popup, start);
   target.dispatchEvent(Object.assign(new Event('gmp-steadychange'), { isSteady: true }));
 
   return {

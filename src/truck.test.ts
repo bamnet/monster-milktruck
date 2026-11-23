@@ -144,7 +144,6 @@ describe('Truck', () => {
       model.element,
       input,
       popup,
-      'RELATIVE_TO_GROUND',
       START,
       () => {
         readyCount++;
@@ -174,6 +173,7 @@ describe('Truck', () => {
     expect(map.flyCalls).toHaveLength(1);
     expect(readyCount).toBe(1);
     expect(map.flyCalls[0]?.durationMillis).toBe(0);
+    expect(map.flyCalls[0]?.endCamera.altitudeMode).toBe('RELATIVE_TO_GROUND');
     expect(map.flyCalls[0]?.endCamera.center).toEqual({
       lat: START.lat,
       lng: START.lng,
@@ -191,7 +191,7 @@ describe('Truck', () => {
     const input = createInputState({ gas: true });
     const popup = createFakePopup();
 
-    const truck = new Truck(map.element, model.element, input, popup, 'RELATIVE_TO_GROUND', START);
+    const truck = new Truck(map.element, model.element, input, popup, START);
 
     expect(model.positionWrites).toHaveLength(1);
     expect(model.orientationWrites).toHaveLength(1);
@@ -212,7 +212,7 @@ describe('Truck', () => {
     const input = createInputState({ gas: true });
     const popup = createFakePopup();
 
-    const truck = new Truck(map.element, model.element, input, popup, 'RELATIVE_TO_GROUND', START);
+    const truck = new Truck(map.element, model.element, input, popup, START);
 
     // Frame 1 (before initial gmp-steadychange) starts an in-flight camera update
     truck.step(1 / 60);
@@ -243,7 +243,7 @@ describe('Truck', () => {
     const input = createInputState({ gas: true, right: true });
     const popup = createFakePopup();
 
-    const truck = new Truck(map.element, model.element, input, popup, 'RELATIVE_TO_GROUND', START);
+    const truck = new Truck(map.element, model.element, input, popup, START);
 
     for (let i = 0; i < 5; i++) {
       truck.step(1 / 60);
@@ -281,12 +281,12 @@ describe('Truck', () => {
     const origNow = performance.now;
     performance.now = () => fakeNow;
     try {
-      const truck = new Truck(map.element, model.element, input, popup, 'ABSOLUTE', START);
+      const truck = new Truck(map.element, model.element, input, popup, START);
 
       truck.teleportTo(35.668607, 139.822026, 180);
       expect(map.flyCalls).toHaveLength(1);
       expect(map.flyCalls[0]?.durationMillis).toBe(1200);
-      expect(map.flyCalls[0]?.endCamera.altitudeMode).toBe('ABSOLUTE');
+      expect(map.flyCalls[0]?.endCamera.altitudeMode).toBe('RELATIVE_TO_GROUND');
       expect(map.flyCalls[0]?.endCamera.center).toEqual({
         lat: 35.668607,
         lng: 139.822026,
@@ -307,7 +307,58 @@ describe('Truck', () => {
       truck.step(1 / 60);
       expect(map.flyCalls).toHaveLength(2);
       expect(map.flyCalls[1]?.durationMillis).toBe(0);
-      expect(map.flyCalls[1]?.endCamera.altitudeMode).toBe('ABSOLUTE');
+      expect(map.flyCalls[1]?.endCamera.altitudeMode).toBe('RELATIVE_TO_GROUND');
+    } finally {
+      performance.now = origNow;
+    }
+  });
+
+  test('snapCamera forces a 0ms re-snap while stationary without churn and defers until active teleport completes', () => {
+    const map = createFakeMap();
+    const model = createFakeModel();
+    const input = createInputState();
+    const popup = createFakePopup();
+
+    let fakeNow = 1_000;
+    const origNow = performance.now;
+    performance.now = () => fakeNow;
+    try {
+      const truck = new Truck(map.element, model.element, input, popup, START);
+      map.dispatchSteady(true);
+      expect(map.flyCalls).toHaveLength(1);
+
+      // Stationary mode switch calls snapCamera(): forces immediate 0ms RELATIVE_TO_GROUND snap
+      truck.snapCamera();
+      expect(map.flyCalls).toHaveLength(2);
+      expect(map.flyCalls[1]?.durationMillis).toBe(0);
+      expect(map.flyCalls[1]?.endCamera.altitudeMode).toBe('RELATIVE_TO_GROUND');
+
+      // Subsequent stationary frames remain silent
+      for (let i = 0; i < 30; i++) {
+        fakeNow += 16;
+        truck.step(1 / 60);
+      }
+      expect(map.flyCalls).toHaveLength(2);
+
+      // Calling snapCamera() mid-teleport preserves the 1200ms flight and snaps once when it ends
+      truck.teleportTo(50.085734, -122.855824, 220);
+      expect(map.flyCalls).toHaveLength(3);
+      expect(map.flyCalls[2]?.durationMillis).toBe(1200);
+
+      fakeNow += 300;
+      truck.snapCamera();
+      truck.step(1 / 60);
+      expect(map.flyCalls).toHaveLength(3);
+
+      fakeNow += 950;
+      truck.step(1 / 60);
+      expect(map.flyCalls).toHaveLength(4);
+      expect(map.flyCalls[3]?.durationMillis).toBe(0);
+      expect(map.flyCalls[3]?.endCamera.altitudeMode).toBe('RELATIVE_TO_GROUND');
+
+      fakeNow += 16;
+      truck.step(1 / 60);
+      expect(map.flyCalls).toHaveLength(4);
     } finally {
       performance.now = origNow;
     }
@@ -320,7 +371,7 @@ describe('Truck', () => {
     const popup = createFakePopup();
 
     const northStart = { lat: 37.423501, lng: -122.086744, heading: 0 };
-    const truck = new Truck(map.element, model.element, input, popup, 'RELATIVE_TO_GROUND', northStart);
+    const truck = new Truck(map.element, model.element, input, popup, northStart);
     map.dispatchSteady(true);
 
     const dt = 1 / 60;
@@ -348,7 +399,7 @@ describe('Truck', () => {
     const popup = createFakePopup();
 
     const northStart = { lat: 37.423501, lng: -122.086744, heading: 0 };
-    const truck = new Truck(map.element, model.element, input, popup, 'RELATIVE_TO_GROUND', northStart);
+    const truck = new Truck(map.element, model.element, input, popup, northStart);
     map.dispatchSteady(true);
 
     const dt = 1 / 60;
@@ -377,7 +428,6 @@ describe('Truck', () => {
       stoppedModel.element,
       createInputState({ right: true }),
       createFakePopup(),
-      'RELATIVE_TO_GROUND',
       { ...START, heading: 0 },
     );
     for (let i = 0; i < 60; i++) stoppedTruck.step(1 / 60);
@@ -393,7 +443,6 @@ describe('Truck', () => {
         model.element,
         input,
         createFakePopup(),
-        'RELATIVE_TO_GROUND',
         { ...START, heading: 0 },
       );
       for (let i = 0; i < warmupSec * 60; i++) truck.step(1 / 60);
@@ -421,7 +470,6 @@ describe('Truck', () => {
         model.element,
         input,
         createFakePopup(),
-        'RELATIVE_TO_GROUND',
         { ...START, heading: 0 },
       );
       map.dispatchSteady(true);
@@ -466,7 +514,6 @@ describe('Truck', () => {
         stalledModel.element,
         createInputState({ gas: true }),
         createFakePopup(),
-        'RELATIVE_TO_GROUND',
         START,
       );
       stalledTruck.start();
@@ -481,7 +528,6 @@ describe('Truck', () => {
         clampedModel.element,
         createInputState({ gas: true }),
         createFakePopup(),
-        'RELATIVE_TO_GROUND',
         START,
       );
       clampedTruck.step(0.25);
@@ -499,7 +545,7 @@ describe('Truck', () => {
     const input = createInputState();
     const popup = createFakePopup();
 
-    const truck = new Truck(map.element, model.element, input, popup, 'RELATIVE_TO_GROUND', START);
+    const truck = new Truck(map.element, model.element, input, popup, START);
     map.dispatchSteady(true);
 
     const baseFlyCalls = map.flyCalls.length;
@@ -560,7 +606,6 @@ describe('Truck', () => {
       model.element,
       input,
       createFakePopup(),
-      'RELATIVE_TO_GROUND',
       { ...START, heading: 175 },
     );
     map.dispatchSteady(true);
@@ -592,7 +637,6 @@ describe('Truck', () => {
       createFakeModel().element,
       createInputState(),
       idlePopup,
-      'RELATIVE_TO_GROUND',
       START,
     );
     for (let i = 0; i < 9; i++) idleTruck.step(1.0);
@@ -611,7 +655,6 @@ describe('Truck', () => {
       createFakeModel().element,
       fastInput,
       fastPopup,
-      'RELATIVE_TO_GROUND',
       START,
     );
     // Accelerate past 80 m/s (~1.8s = 108 frames), then hold >7s (420 frames)
@@ -630,7 +673,6 @@ describe('Truck', () => {
       createFakeModel().element,
       createInputState({ reverse: true }),
       cruisePopup,
-      'RELATIVE_TO_GROUND',
       START,
     );
     for (let i = 0; i < 20 * 60; i++) cruiseTruck.step(1 / 60);
@@ -648,7 +690,6 @@ describe('Truck', () => {
       model.element,
       input,
       createFakePopup(),
-      'RELATIVE_TO_GROUND',
       { ...START, heading: 0 },
     );
 
@@ -684,7 +725,6 @@ describe('Truck', () => {
       model.element,
       input,
       createFakePopup(),
-      'RELATIVE_TO_GROUND',
       whistlerStart,
       undefined,
       (pose, immediate) => {

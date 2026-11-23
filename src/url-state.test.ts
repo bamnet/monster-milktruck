@@ -167,7 +167,7 @@ describe('url-state', () => {
     let nowMs = 0;
     const { target, writes } = createFakeHistoryTarget({
       pathname: '/monster-milktruck/',
-      search: '?fixedAltitude=1',
+      search: '?utm_source=share',
       hash: '',
     });
 
@@ -183,10 +183,10 @@ describe('url-state', () => {
       throttleMs: 1000,
     });
 
-    // Boot flush writes initial state while preserving pathname and ?fixedAltitude=1
+    // Boot flush writes initial state while preserving pathname and ?utm_source=share
     sync.flush();
     expect(writes).toEqual([
-      '/monster-milktruck/?fixedAltitude=1#lat=37.423501&lng=-122.086744&heading=90&mode=satellite',
+      '/monster-milktruck/?utm_source=share#lat=37.423501&lng=-122.086744&heading=90&mode=satellite',
     ]);
 
     // Duplicate flush with unchanged state is a no-op
@@ -205,7 +205,7 @@ describe('url-state', () => {
     sync.updatePose({ lat: 37.423501, lng: -122.0861, heading: 92 }, false);
     expect(writes).toHaveLength(2);
     expect(writes[1]).toBe(
-      '/monster-milktruck/?fixedAltitude=1#lat=37.423501&lng=-122.086100&heading=92&mode=satellite',
+      '/monster-milktruck/?utm_source=share#lat=37.423501&lng=-122.086100&heading=92&mode=satellite',
     );
 
     // Coming to rest at 1350ms (inside next throttle window) flushes immediately
@@ -213,7 +213,7 @@ describe('url-state', () => {
     sync.updatePose({ lat: 37.423501, lng: -122.0858, heading: 95 }, true);
     expect(writes).toHaveLength(3);
     expect(writes[2]).toBe(
-      '/monster-milktruck/?fixedAltitude=1#lat=37.423501&lng=-122.085800&heading=95&mode=satellite',
+      '/monster-milktruck/?utm_source=share#lat=37.423501&lng=-122.085800&heading=95&mode=satellite',
     );
 
     // Changing map mode at 1400ms flushes immediately
@@ -221,7 +221,7 @@ describe('url-state', () => {
     sync.setMode('ROADMAP');
     expect(writes).toHaveLength(4);
     expect(writes[3]).toBe(
-      '/monster-milktruck/?fixedAltitude=1#lat=37.423501&lng=-122.085800&heading=95&mode=roadmap',
+      '/monster-milktruck/?utm_source=share#lat=37.423501&lng=-122.085800&heading=95&mode=roadmap',
     );
   });
 
