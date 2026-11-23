@@ -266,4 +266,129 @@ test.describe('Monster Milktruck browser smoke tests', () => {
     expect(trackingOffsetM).toBeLessThan(80);
     expect(errors).toEqual([]);
   });
+
+  test('deep-links location, heading, and map mode via URL hash and syncs live updates cleanly', async ({
+    page,
+  }) => {
+    const errors = attachErrorTracking(page);
+    const sf = PRESETS.find((p) => p.label === 'San Francisco')!;
+    const whistler = PRESETS.find((p) => p.label === 'Whistler')!;
+    const tokyo = PRESETS.find((p) => p.label === 'Tokyo')!;
+
+    // 1. Load directly from a deep-linked URL hash (while preserving ?fixedAltitude=1)
+    await page.goto(
+      `${app!.url}/?fixedAltitude=1#lat=${sf.lat.toFixed(6)}&lng=${sf.lng.toFixed(6)}&heading=220&mode=roadmap`,
+    );
+    await waitForMapAndModelReady(page);
+
+    const bootState = await page.evaluate(() => {
+      const map = document.querySelector('gmp-map-3d') as google.maps.maps3d.Map3DElement;
+      const model = document.querySelector('gmp-model-3d') as google.maps.maps3d.Model3DElement;
+      const c = map.center as google.maps.LatLngAltitude;
+      const p = model.position as google.maps.LatLngAltitude;
+      return {
+        mapMode: String(map.mode),
+        selectValue: (document.getElementById('map-mode') as HTMLSelectElement).value,
+        search: window.location.search,
+        hash: window.location.hash,
+        mapCenter: { lat: c.lat, lng: c.lng },
+        mapHeading: map.heading ?? 0,
+        modelPos: { lat: p.lat, lng: p.lng },
+      };
+    });
+
+    expect(bootState.mapMode).toBe('ROADMAP');
+    expect(bootState.selectValue).toBe('ROADMAP');
+    expect(bootState.search).toBe('?fixedAltitude=1');
+    expect(bootState.hash).toBe('#lat=37.774900&lng=-122.419400&heading=220&mode=roadmap');
+    expect(horizontalDistanceMeters(bootState.modelPos, sf)).toBeLessThan(1);
+    expect(horizontalDistanceMeters(bootState.mapCenter, sf)).toBeLessThan(25);
+    expect(Math.abs(fixAngle(bootState.mapHeading - 220))).toBeLessThan(3);
+
+    // 2. Switching map mode and clicking a preset update the URL hash immediately
+    await page.locator('#map-mode').selectOption('SATELLITE');
+    expect(await page.evaluate(() => window.location.hash)).toBe(
+      '#lat=37.774900&lng=-122.419400&heading=220&mode=satellite',
+    );
+
+    await page.locator('#presets button', { hasText: whistler.label }).click();
+    expect(await page.evaluate(() => window.location.hash)).toBe(
+      `#lat=${whistler.lat.toFixed(6)}&lng=${whistler.lng.toFixed(6)}&heading=${whistler.heading}&mode=satellite`,
+    );
+    expect(await page.evaluate(() => window.location.search)).toBe('?fixedAltitude=1');
+
+    // 3. Editing window.location.hash in-place teleports and updates map mode without reload
+    await page.evaluate(
+      ({ lat, lng, heading }) => {
+        window.location.hash = `#lat=${lat.toFixed(6)}&lng=${lng.toFixed(6)}&heading=${heading}&mode=roadmap`;
+      },
+      tokyo,
+    );
+
+    await expect
+      .poll(async () => {
+        return page.evaluate((target: { lat: number; lng: number }) => {
+          const map = document.querySelector('gmp-map-3d') as google.maps.maps3d.Map3DElement;
+          const model = document.querySelector('gmp-model-3d') as google.maps.maps3d.Model3DElement;
+          const p = model.position as google.maps.LatLngAltitude;
+          const select = document.getElementById('map-mode') as HTMLSelectElement;
+          return (
+            String(map.mode) === 'ROADMAP' &&
+            select.value === 'ROADMAP' &&
+            Math.abs(p.lat - target.lat) < 0.00001 &&
+            Math.abs(p.lng - target.lng) < 0.00001
+          );
+        }, tokyo);
+      })
+      .toBe(true);
+
+    // 4. Driving throttles history.replaceState calls and flushes exact final position on stop
+    await page.evaluate(() => {
+      const win = window as unknown as { __replaceCount: number };
+      win.__replaceCount = 0;
+      const orig = window.history.replaceState.bind(window.history);
+      window.history.replaceState = (...args: Parameters<History['replaceState']>) => {
+        win.__replaceCount++;
+        return orig(...args);
+      };
+    });
+
+    try {
+      await page.keyboard.down('ArrowUp');
+      await page.waitForTimeout(1_300);
+    } finally {
+      await page.keyboard.up('ArrowUp');
+    }
+
+    await expect
+      .poll(
+        async () => {
+          const { modelPos, hashPos } = await page.evaluate(() => {
+            const model = document.querySelector('gmp-model-3d') as google.maps.maps3d.Model3DElement;
+            const p = model.position as google.maps.LatLngAltitude;
+            const params = new URLSearchParams(window.location.hash.slice(1));
+            return {
+              modelPos: { lat: p.lat, lng: p.lng },
+              hashPos: {
+                lat: Number(params.get('lat')),
+                lng: Number(params.get('lng')),
+              },
+            };
+          });
+          return (
+            horizontalDistanceMeters(modelPos, tokyo) > 15 &&
+            horizontalDistanceMeters(modelPos, hashPos) < 0.25
+          );
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(true);
+
+    const replaceCount = await page.evaluate(
+      () => (window as unknown as { __replaceCount: number }).__replaceCount,
+    );
+    expect(replaceCount).toBeGreaterThanOrEqual(1);
+    expect(replaceCount).toBeLessThanOrEqual(6);
+    expect(errors).toEqual([]);
+  });
 });

@@ -1,15 +1,21 @@
 import { PRESETS, resolveAltitudeMode } from './config.ts';
 import { createInput } from './input.ts';
 import { createLoadingScreen } from './loading.ts';
-import { Truck, type TruckStart } from './truck.ts';
+import { fixAngle } from './math3d.ts';
+import { Truck } from './truck.ts';
+import {
+  browserUrlHistoryTarget,
+  createUrlStateSync,
+  hasPoseChangedForUrl,
+  parseUrlHash,
+  type AppMapMode,
+} from './url-state.ts';
 import truckModelUrl from '../public/milktruck.glb' with { type: 'file' };
 import './styles.css';
 
 declare const process: { env: { GOOGLE_MAPS_API_KEY?: string } };
 
 const API_KEY = process.env.GOOGLE_MAPS_API_KEY ?? '';
-
-const INIT_LOC: TruckStart = PRESETS[0]!;
 
 const loadingScreen = createLoadingScreen({
   root: document.getElementById('loading-screen'),
@@ -56,28 +62,40 @@ async function main(): Promise<void> {
 
   loadingScreen.setProgress(60);
 
+  const initState = parseUrlHash(window.location.hash);
+  const initHeading = fixAngle(initState.heading);
+  const urlSync = createUrlStateSync({
+    initialState: initState,
+    target: browserUrlHistoryTarget(window),
+  });
+  const toSdkMapMode = (mode: AppMapMode) =>
+    mode === 'ROADMAP' ? MapMode.ROADMAP : MapMode.SATELLITE;
+
   const map = new Map3DElement({
-    center: { lat: INIT_LOC.lat, lng: INIT_LOC.lng, altitude: 0 },
-    heading: INIT_LOC.heading,
+    center: { lat: initState.lat, lng: initState.lng, altitude: 0 },
+    heading: initHeading,
     tilt: 72,
     range: 55,
-    mode: MapMode.SATELLITE,
+    mode: toSdkMapMode(initState.mode),
     defaultUIHidden: true,
   });
 
   document.getElementById('map-container')!.appendChild(map);
 
-  const mapModeSelect = document.getElementById('map-mode') as HTMLSelectElement;
+  const mapModeSelect = document.getElementById('map-mode') as HTMLSelectElement | null;
   if (mapModeSelect) {
+    mapModeSelect.value = initState.mode;
     mapModeSelect.addEventListener('change', () => {
-      map.mode = mapModeSelect.value === 'ROADMAP' ? MapMode.ROADMAP : MapMode.SATELLITE;
+      const nextMode: AppMapMode = mapModeSelect.value === 'ROADMAP' ? 'ROADMAP' : 'SATELLITE';
+      map.mode = toSdkMapMode(nextMode);
+      urlSync.setMode(nextMode);
     });
   }
 
   const model = new Model3DElement({
     src: truckModelUrl,
-    position: { lat: INIT_LOC.lat, lng: INIT_LOC.lng, altitude: 0 },
-    orientation: { heading: INIT_LOC.heading, tilt: 0, roll: 0 },
+    position: { lat: initState.lat, lng: initState.lng, altitude: 0 },
+    orientation: { heading: initHeading, tilt: 0, roll: 0 },
     altitudeMode: AltitudeMode.CLAMP_TO_GROUND,
     scale: 1,
   });
@@ -87,8 +105,47 @@ async function main(): Promise<void> {
 
   const input = createInput();
   const popupEl = document.getElementById('popup')!;
-  const truck = new Truck(map, model, input, popupEl, altitudeMode, INIT_LOC, () => {
-    loadingScreen.complete();
+  const truck = new Truck(
+    map,
+    model,
+    input,
+    popupEl,
+    altitudeMode,
+    { lat: initState.lat, lng: initState.lng, heading: initHeading },
+    () => {
+      loadingScreen.complete();
+    },
+    (pose, immediate) => {
+      urlSync.updatePose(pose, immediate);
+    },
+  );
+
+  urlSync.flush();
+
+  window.addEventListener('hashchange', () => {
+    if (window.location.hash === urlSync.getLastHash()) return;
+    const prev = urlSync.getState();
+    const next = parseUrlHash(window.location.hash, prev);
+    const poseChanged = hasPoseChangedForUrl(next, truck.getPose());
+    urlSync.setState(next, true);
+    if (next.mode !== prev.mode) {
+      map.mode = toSdkMapMode(next.mode);
+      if (mapModeSelect) {
+        mapModeSelect.value = next.mode;
+      }
+    }
+    if (poseChanged) {
+      truck.teleportTo(next.lat, next.lng, next.heading);
+    }
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      urlSync.flush();
+    }
+  });
+  window.addEventListener('pagehide', () => {
+    urlSync.flush();
   });
 
   renderPresets(truck);
